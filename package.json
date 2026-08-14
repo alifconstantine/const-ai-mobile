@@ -1,0 +1,19 @@
+{
+  "name": "const-ai-mobile-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=@const-ai/web",
+    "dev:mobile": "turbo dev --filter=@const-ai/mobile",
+    "dev:backend": "turbo dev --filter=@const-ai/backend",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@10.5.2"
+}
