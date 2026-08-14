@@ -1,24 +1,25 @@
 # Const AI Mobile — System Architecture & Blueprint
-**Version:** 3.1.0 (JARVIS, On-Device Neural Voice & Autonomous Developer Edition)  
+
+**Version:** 3.1.0 (On-Device Neural Voice & Autonomous Developer Edition)  
 **Repository:** `D:/code/platform/const-ai-mobile`  
-**Identity:** Personal Life Assistant + Autonomous Coding Agent + Personal JARVIS + On-Device Voice AI  
-**Core Stack:** React Native Expo (Android Standalone + iOS Companion) + Next.js 16 Web Dashboard + Convex Real-Time Backend + Supertone Supertonic-3 (Local ONNX TTS)
+**Identity:** Personal Assistant + Autonomous Coding Agent + On-Device Voice AI Engine  
+**Core Stack:** React Native Expo (Android Standalone & iOS Companion) + Next.js 15 Web Dashboard + Convex Real-Time Backend + Supertone Supertonic-3 (Local ONNX TTS)
 
 ---
 
 ## 1. Executive Summary & Product Vision
 
-**Const AI** adalah ekosistem AI Agent mandiri multi-guna yang menggabungkan empat pilar utama:
-1. **Personal Life Assistant (JARVIS)**: Mengelola jadwal harian, merangkum email, pengingat cerdas, pencatatan otomatis, dan interaksi percakapan natural.
-2. **On-Device Neural Voice Engine (Supertonic-3)**: Sistem Text-to-Speech (TTS) lokal neural berkecepatan tinggi (~99M params) yang berjalan 100% di HP dengan latensi nol, bebas biaya API server, mendukung *emotion tags*, dan *custom voice styles*.
-3. **Autonomous Coding & DevOps Agent**: Menulis kode, membaca repositori Git, menjalankan build, mengedit file secara otomatis, dan mengeksekusi terminal shell.
+Const AI adalah ekosistem AI Agent mandiri multi-fungsi yang menggabungkan empat pilar utama:
+1. **Personal Productivity Assistant**: Mengelola jadwal harian, merangkum email dan pesan, pengingat kontekstual, pencatatan otomatis, dan interaksi percakapan natural.
+2. **On-Device Neural Voice Engine (Supertonic-3)**: Sistem Text-to-Speech (TTS) neural lokal berkecepatan tinggi (~99M parameter) yang berjalan di perangkat dengan latensi rendah, tanpa biaya API server, mendukung *emotion tags*, dan *custom voice styles*.
+3. **Autonomous Coding & DevOps Agent**: Menulis kode, membaca repositori Git, menjalankan build, mengedit berkas secara otomatis, dan mengeksekusi terminal shell.
 4. **Background Automation Engine**: Menjalankan tugas terjadwal (*Scheduled Tasks*) 24/7 di latar belakang menggunakan Convex Cron, MCP, dan Composio.
 
 ---
 
 ## 2. On-Device Neural Voice Engine (Supertonic-3 Integration)
 
-Sistem suara Const AI dirancang dengan prinsip **Zero API Cost**, **Zero Network Latency**, dan **100% Privacy/Offline Ready**.
+Sistem suara Const AI dirancang dengan prinsip **Zero API Cost**, **Zero Network Latency**, dan **Privacy/Offline Ready**.
 
 ```mermaid
 graph TD
@@ -32,45 +33,40 @@ graph TD
 
 ### A. Karakteristik Model
 * **Model:** Supertone / Supertonic-3 (~99M Parameters).
-* **Format:** ONNX Runtime (`.onnx`) dioptimalkan untuk CPU/NPU HP (*NNAPI* di Android, *CoreML* di iOS).
+* **Format:** ONNX Runtime (`.onnx`) dioptimalkan untuk CPU/NPU perangkat (*NNAPI* di Android, *CoreML* di iOS).
 * **Kualitas Audio:** 44.1 kHz 16-bit WAV (Studio Quality).
 * **Bahasa:** 31 Bahasa (Multilingual tanpa adapter tambahan).
 * **Emotion & Expression Tags:** Mendukung tag natural seperti `<laugh>`, `<breath>`, `<sigh>` yang dapat disisipkan langsung oleh LLM dalam prompt percakapan.
 
 ### B. Strategi On-Demand Model Download (Asset Manager)
-* **Ukuran APK/IPA Ramping:** File installer aplikasi tetap berukuran kecil (<50 MB) tanpa membundel file bobot model secara langsung.
+* **Ukuran Distribusi Ramping:** Berkas installer aplikasi tetap berukuran kecil (<50 MB) tanpa membundel berkas bobot model secara langsung.
 * **In-App Model Downloader:**
-  * Saat pertama kali pengguna mengaktifkan Voice Mode atau di menu Onboarding/Settings, aplikasi menyediakan dialog: *"Download JARVIS Voice Pack (~250 MB) untuk suara instan & hemat kuota."*
-  * Model diunduh dari CDN/Hugging Face sekali saja ke `FileSystem.documentDirectory` dengan indikator *download progress* dan verifikasi *SHA-256 Checksum*.
-* **Status Model:** Tersimpan di storage lokal perangkat dan dicatat statusnya di konfigurasi pengguna.
+  * Saat pertama kali pengguna mengaktifkan Voice Mode atau di menu Pengaturan, aplikasi menyediakan opsi unduh: *"Download Voice Model Pack (~250 MB) untuk pemrosesan suara lokal."*
+  * Model diunduh dari CDN/Hugging Face sekali saja ke `FileSystem.documentDirectory` dengan indikator progres unduhan dan verifikasi integritas *SHA-256 Checksum*.
+* **Status Model:** Tersimpan di penyimpanan lokal perangkat dan dicatat statusnya di konfigurasi pengguna.
 
 ### C. Custom Voice System & Presets
 * **Preset Suara Bawaan:**
-  * `M1` / `M2`: Persona **JARVIS** (British/Formal Male).
-  * `F1` / `F2`: Persona **FRIDAY** (Friendly Assistant Female).
-  * `M3–M5` & `F3–F5`: Persona Casual, Storyteller, & Energetic.
+  * `M1` / `M2`: Persona Formal & Professional Male.
+  * `F1` / `F2`: Persona Friendly & Natural Female.
+  * `M3–M5` & `F3–F5`: Persona Casual, Storyteller, dan Energetic.
 * **Custom Voice Styles:**
-  * File *voice style* Supertonic berukuran sangat kecil (**JSON ~beberapa KB**).
-  * Pengguna dapat mengimpor file `voice_style.json` kustom mereka sendiri, atau memilih dari galeri persona suara di Web Control Center / Mobile App.
+  * Berkas *voice style* Supertonic berukuran ringkas (JSON ~beberapa KB).
+  * Pengguna dapat mengimpor berkas `voice_style.json` kustom, atau memilih dari galeri persona suara di Web Control Center / Mobile App.
 
 ---
 
-## 3. Analisis iOS & Strategi Companion
+## 3. Analisis Platform iOS & Strategi Companion
 
-### Bagaimana "Boop" Menangani iOS?
-Di video Chris Raroque:
-* Server/engine Boop **sebenarnya di-host di Mac / Cloud**, dan Chris berbicara dengannya dari iPhone melalui **iMessage / SMS webhook**.
-* Mac mengeksekusi AppleScript lokal, browser automation, dan terminal, lalu mengirimkan balasannya ke iPhone.
-
-### Strategi Const AI untuk iOS:
-* **Jika iOS Standalone (Tanpa Mac/PC)**: Pengguna iPhone tetap bisa menggunakan **90% fitur JARVIS & Life Assistant**: Chat, Natural Voice (Supertonic via CoreML), Natural Language Settings, Notes, Scheduled Tasks (Composio: Gmail, Notion, Calendar), Web Search, dan Analisis Data. Fitur yang terbatas hanyalah eksekusi terminal shell mesin lokal.
-* **Jika iOS Terhubung ke Mac/PC (Remote Companion)**: Begitu di-pair via QR Code ke Mac/PC, iPhone memiliki **100% kapabilitas Coding Agent & Terminal PC** dari jarak jauh!
+### Pola Integrasi Komputasi Jarak Jauh
+* **Jika iOS Standalone (Tanpa Mac/PC)**: Pengguna iOS dapat menggunakan fitur Personal Assistant: Chat, Natural Voice (Supertonic via CoreML), Natural Language Settings, Notes, Scheduled Tasks (Composio: Gmail, Notion, Calendar), Web Search, dan Analisis Data. Fitur yang dibatasi oleh lingkungan sandbox iOS hanyalah eksekusi shell lokal.
+* **Jika iOS Terhubung ke Mac/PC (Remote Companion)**: Melalui pairing kode QR ke daemon desktop, perangkat iOS memiliki kapabilitas penuh untuk mengontrol agen coding dan terminal PC dari jarak jauh.
 
 ---
 
 ## 4. 4 Mode Eksekusi & Keamanan (Agent Operating Modes)
 
-Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui Chat atau Web Dashboard:
+Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui percakapan atau Web Dashboard:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -80,11 +76,11 @@ Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui Chat a
 │ (Implementation    │ (Strict HITL)      │ (Standard Coding)    │ (Zero Approval)       │
 │  Plan First)       │                    │                      │                       │
 ├────────────────────┼────────────────────┼──────────────────────┼───────────────────────┤
-│ • Membuat file     │ • Setiap edit file │ • AI langsung edit   │ • Eksekusi instan     │
-│   rencana & riset  │   & shell command  │   file & run safe    │   tanpa prompt atau   │
-│ • Menunggu review  │   wajib persetujuan│   command otomatis   │   konfirmasi modal    │
-│   user sebelum     │   modal di HP      │ • Hanya prompt untuk │ • Untuk otomasi penuh │
-│   mulai coding     │ • Keamanan penuh   │   perintah bahaya    │   dan task background │
+│ - Membuat berkas   │ - Setiap edit file │ - AI langsung edit   │ - Eksekusi instan     │
+│   rencana & riset  │   & shell command  │   file & run safe    │   tanpa konfirmasi    │
+│ - Menunggu review  │   wajib persetujuan│   command otomatis   │   modal               │
+│   user sebelum     │   modal di HP      │ - Hanya prompt untuk │ - Untuk otomasi penuh │
+│   mulai coding     │ - Keamanan penuh   │   perintah berisiko  │   dan background task │
 └────────────────────┴────────────────────┴──────────────────────┴───────────────────────┘
 ```
 
@@ -92,7 +88,7 @@ Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui Chat a
 
 ## 5. Android Termux Terminal & Background Service Architecture
 
-Agar terminal di Android dapat berjalan terus menerus di latar belakang tanpa dimatikan oleh sistem operasi:
+Agar proses kompilasi dan terminal shell di Android dapat berjalan terus-menerus di latar belakang tanpa dihentikan oleh sistem operasi:
 
 ```mermaid
 graph TD
@@ -103,9 +99,9 @@ graph TD
     C -->|Mencegah Doze Mode| B
 ```
 
-1. **Integrated In-App Terminal View**: Tab terminal khusus di dalam aplikasi mobile untuk memantau langsung output shell bash/zsh, npm, python, dan `omniroute`.
-2. **Android Foreground Service**: Menampilkan notifikasi persisten di status bar (*"Const AI Agent is running in background"*) sehingga task kompilasi atau cron tidak dibunuh oleh OS Android.
-3. **Wakelock Management**: Menjaga CPU tetap aktif saat mengeksekusi long-running build task.
+1. **Integrated In-App Terminal View**: Tab terminal khusus di dalam aplikasi mobile untuk memantau output shell bash/zsh, npm, python, dan git.
+2. **Android Foreground Service**: Menampilkan notifikasi persisten di status bar (*"Const AI Agent is running in background"*) sehingga task tidak dibunuh oleh OS Android.
+3. **Wakelock Management**: Menjaga CPU tetap aktif saat mengeksekusi proses kompilasi berdurasi panjang.
 
 ---
 
@@ -113,12 +109,12 @@ graph TD
 
 Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan sehari-hari di chat:
 
-* **Contoh Perintah Chat:**
-  * *"Const, ganti suara ke persona FRIDAY F1"* → Memanggil mutation `userConfigs.updateVoiceStyle`.
-  * *"Ganti model AI aktif ke Claude 3.7 Sonnet ya"* → Memanggil mutation `userConfigs.updateModel`.
-  * *"Mulai sekarang ubah mode kerja ke Plan Mode"* → Memanggil mutation `userConfigs.updateMode`.
-  * *"Set limit budget sesi ini maksimal $1"* → Memanggil mutation `userConfigs.updateSpendCap`.
-  * *"Ingat bahwa saya selalu prefer framework Tailwind dan Expo"* → Menyimpan ke tabel `memories`.
+* **Contoh Perintah Konfigurasi:**
+  * *"Ubah persona suara ke preset F1"* -> Memanggil mutasi `userConfigs.updateVoiceStyle`.
+  * *"Ganti model AI aktif ke Claude 3.7 Sonnet"* -> Memanggil mutasi `userConfigs.updateModel`.
+  * *"Ubah mode kerja ke Plan Mode"* -> Memanggil mutasi `userConfigs.updateMode`.
+  * *"Set batas anggaran sesi ini maksimal $1"* -> Memanggil mutasi `userConfigs.updateSpendCap`.
+  * *"Ingat bahwa saya selalu prefer framework Tailwind dan Expo"* -> Menyimpan entri ke tabel `memories`.
 
 ---
 
@@ -126,7 +122,7 @@ Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan se
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                               WEB CONTROL CENTER (Next.js 16)                          │
+│                               WEB CONTROL CENTER (Next.js 15)                          │
 │  ┌─────────────────────────┬─────────────────────────┬───────────────────────────────┐ │
 │  │   BYOK & Model Picker   │   MCP & Composio Hub    │  Credit Top-Up & Analytics    │ │
 │  │  (Gemini, Claude, GPT)  │  (1,000+ App Connectors)│  (Recharts Token / Cost View) │ │
@@ -143,8 +139,8 @@ Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan se
 │  │     Convex Database     │    Scheduled Crons      │       OpenRouter Engine       │ │
 │  │  (Reactive Tables/Sync) │  (24/7 Autonomous Tasks)│   (Zero-Markup Token Proxy)   │ │
 │  ├─────────────────────────┼─────────────────────────┼───────────────────────────────┤ │
-│  │   4-Mode Policy Engine  │   Long-Term Memory DB   │    Stealth Web Browser Hub    │ │
-│  │ (Plan/Ask/Edit/FullYOLO)│  (User Preferences/RAG) │   (Anti-Detect Patchright)    │ │
+│  │   4-Mode Policy Engine  │   Long-Term Memory DB   │    Web Search & Scraper Hub   │ │
+│  │ (Plan/Ask/Edit/FullYOLO)│  (User Preferences/RAG) │   (Anti-Detect Browser/Proxy) │ │
 │  └─────────────────────────┴─────────────────────────┴───────────────────────────────┘ │
 └───────────────────────────▲───────────────────────────────▲────────────────────────────┘
                             │                               │
@@ -154,11 +150,11 @@ Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan se
 │             ANDROID CLIENT (MVP)             │ │               iOS CLIENT               │
 │          (100% Standalone di HP)             │ │       (Life Assistant + PC Companion)  │
 ├──────────────────────────────────────────────┤ ├────────────────────────────────────────┤
-│ • JARVIS Voice UI (Supertonic ONNX Mobile)   │ │ • JARVIS Voice UI (Supertonic CoreML)  │
-│ • In-App Model & Voice Pack Manager          │ │ • In-App Model & Voice Pack Manager    │
-│ • Embedded Termux View & Background Service  │ │ • In-App Notes & Scheduled Tasks       │
-│ • Local File System & Contact/Calendar Bridge│ │ • Cloud MCP & Composio Operator        │
-│ • In-App Notes & Scheduled Task Notifications│ │ • Remote PC Terminal & Code Control    │
+│ - Voice UI (Supertonic ONNX Mobile Engine)   │ │ - Voice UI (Supertonic CoreML Engine)  │
+│ - In-App Model & Voice Pack Asset Manager    │ │ - In-App Model & Voice Pack Manager    │
+│ - Embedded Termux View & Background Service  │ │ - In-App Notes & Scheduled Tasks       │
+│ - Local File System & System Bridge          │ │ - Cloud MCP & Composio Operator        │
+│ - In-App Notes & Task Notifications          │ │ - Remote PC Terminal & Code Control    │
 └──────────────────────────────────────────────┘ └───────────────────▲────────────────────┘
                                                                      │
                                                     Zero-Trust Relay │ (Convex Relay / WebRTC)
@@ -167,9 +163,9 @@ Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan se
                                                  │          DESKTOP DAEMON (PC)           │
                                                  │        (Windows / macOS / Linux)       │
                                                  ├────────────────────────────────────────┤
-                                                 │ • Local Shell Execution (Bash/PowerSh) │
-                                                 │ • File System Access for Coding Proj   │
-                                                 │ • CLI Runner (`omniroute`, Git, Docker)│
+                                                 │ - Local Shell Execution (Bash/PowerSh) │
+                                                 │ - File System Access for Coding Proj   │
+                                                 │ - CLI Runner (Git, Docker, Compilers)  │
                                                  └────────────────────────────────────────┘
 ```
 
@@ -190,7 +186,7 @@ export default defineSchema({
     subscriptionStatus: v.union(v.literal("active"), v.literal("expired"), v.literal("pending_payment")),
     subscriptionPlan: v.union(v.literal("monthly"), v.literal("quarterly"), v.literal("yearly")),
     subscriptionExpiresAt: v.number(),
-    creditsBalanceUsd: v.number(), // Saldo kredit OpenRouter tanpa markup
+    creditsBalanceUsd: v.number(),
     createdAt: v.number(),
   }).index("by_email", ["email"]),
 
@@ -198,7 +194,7 @@ export default defineSchema({
   userConfigs: defineTable({
     userId: v.id("users"),
     inferenceMode: v.union(v.literal("byok"), v.literal("managed_credits")),
-    activeModel: v.string(), // e.g. "google/gemini-2.5-flash", "anthropic/claude-3.7-sonnet"
+    activeModel: v.string(),
     operatingMode: v.union(
       v.literal("plan_mode"),
       v.literal("ask_before_change"),
@@ -211,17 +207,17 @@ export default defineSchema({
       openAi: v.optional(v.string()),
       openRouter: v.optional(v.string()),
     }),
-    sessionSpendCapUsd: v.number(), // Maksimal budget per sesi
-    systemPersona: v.string(), // JARVIS persona prompt
+    sessionSpendCapUsd: v.number(),
+    systemPersona: v.string(),
     timezone: v.string(),
     temperature: v.number(),
     
     // Voice & TTS Configuration
     voiceSettings: v.object({
       ttsEngine: v.union(v.literal("local_supertonic"), v.literal("cloud_fallback")),
-      selectedVoiceStyle: v.string(), // e.g. "JARVIS_M1", "FRIDAY_F1", or custom style key
-      speakingRate: v.number(),       // default: 1.0 (range: 0.5 - 2.0)
-      enableEmotionTags: v.boolean(),  // true: enable <laugh>, <breath>, <sigh>
+      selectedVoiceStyle: v.string(),
+      speakingRate: v.number(),
+      enableEmotionTags: v.boolean(),
       autoPlayVoiceResponse: v.boolean(),
       customVoiceStyleId: v.optional(v.id("voiceStyles")),
     }),
@@ -229,19 +225,19 @@ export default defineSchema({
 
   // 3. Custom Voice Styles & Presets
   voiceStyles: defineTable({
-    userId: v.optional(v.id("users")), // undefined = global system preset
-    name: v.string(),                  // e.g. "JARVIS British", "FRIDAY Friendly"
-    styleKey: v.string(),              // "M1", "F1", "CUSTOM_USER_VOICE"
-    isPreset: v.boolean(),             // true jika preset bawaan Supertonic
+    userId: v.optional(v.id("users")),
+    name: v.string(),
+    styleKey: v.string(),
+    isPreset: v.boolean(),
     description: v.optional(v.string()),
-    styleJson: v.string(),             // Raw JSON string bobot style embedding Supertonic
+    styleJson: v.string(),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
 
   // 4. Long-Term Memory (User Context & Preferences)
   memories: defineTable({
     userId: v.id("users"),
-    key: v.string(), // e.g. "preferred_tech_stack", "birthday", "work_hours"
+    key: v.string(),
     value: v.string(),
     category: v.union(v.literal("preference"), v.literal("fact"), v.literal("system_instruction")),
     updatedAt: v.number(),
@@ -256,7 +252,7 @@ export default defineSchema({
     publicKey: v.string(),
     isOnline: v.boolean(),
     lastPingAt: v.number(),
-    localModelDownloaded: v.optional(v.boolean()), // Status apakah model ONNX sudah diunduh di HP
+    localModelDownloaded: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   devicePairings: defineTable({
@@ -368,9 +364,9 @@ export default defineSchema({
 
 ## 9. Monorepo Structure (Turborepo)
 
-Struktur monorepo resmi untuk menyatukan Mobile, Web, dan Backend dalam 1 Git repository:
+Struktur monorepo untuk menyatukan Mobile, Web, dan Backend dalam 1 repository:
 
-```
+```text
 const-ai-mobile/
 ├── apps/
 │   ├── mobile/                          # React Native (Expo) - Android & iOS
@@ -380,30 +376,30 @@ const-ai-mobile/
 │   │   │   ├── terminal/                # In-App Termux View & Shell Stream
 │   │   │   └── hitl/                    # Approval Modal & Plan Card
 │   │   ├── services/
-│   │   │   ├── voice/                   # Supertonic ONNX runner & Audio Queue (`onnxruntime-react-native`)
+│   │   │   ├── voice/                   # Supertonic ONNX runner & Audio Queue
 │   │   │   └── termux/                  # Android Foreground Service & Local Socket Bridge
 │   │   └── package.json
 │   │
-│   ├── web/                             # Next.js 16 Web Dashboard
+│   ├── web/                             # Next.js 15 Web Dashboard
 │   │   ├── app/                         # App Router (BYOK, Credit Top-Up, MCP Hub, Analytics)
 │   │   ├── components/                  # Shadcn UI, Voice Persona Uploader, Recharts Cost View
 │   │   └── package.json
 │   │
-│   └── desktop-daemon/                  # PC Runner (Tauri / Node.js CLI)
+│   └── desktop-daemon/                  # PC Runner (Node.js CLI / Native Runner)
 │       └── src/                         # Shell Execution & Zero-Trust QR Pairing
 │
 ├── packages/
 │   ├── backend/                         # Convex Realtime Hub (Single Source of Truth)
 │   │   ├── convex/
 │   │   │   ├── schema.ts                # Unified Database Schema
-│   │   │   ├── agent.ts                 # JARVIS Core & NL Settings Handler
+│   │   │   ├── agent.ts                 # Agent Core & NL Settings Handler
 │   │   │   ├── voice.ts                 # Voice Style Manager & Presets Resolver
 │   │   │   ├── crons.ts                 # Scheduled Task Processor
 │   │   │   └── policyEngine.ts          # 4 Operating Modes Evaluator
 │   │   └── package.json
 │   │
 │   ├── types/                           # Shared TypeScript Definitions & Interfaces
-│   └── config/                          # Shared ESLint & TSConfig
+│   └── config/                          # Shared Configuration
 │
 ├── turbo.json                           # Turborepo Build Pipeline Orchestration
 ├── pnpm-workspace.yaml                  # PNPM Workspace Configuration

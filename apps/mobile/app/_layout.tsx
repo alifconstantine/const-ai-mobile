@@ -17,7 +17,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: "#09090b" },
         }}
       >
-        <Stack.Screen name="index" options={{ title: "Const AI (JARVIS)" }} />
+        <Stack.Screen name="index" options={{ title: "Const AI Mobile" }} />
       </Stack>
     </ConvexProvider>
   );

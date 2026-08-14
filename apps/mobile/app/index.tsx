@@ -3,21 +3,21 @@ import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 export default function HomeScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.badge}>🤖⚡ Standalone Edition</Text>
+      <Text style={styles.badge}>Standalone Edition</Text>
       <Text style={styles.title}>Const AI Mobile</Text>
       <Text style={styles.subtitle}>
-        Personal Life Assistant + Neural Voice + Autonomous Agent
+        Personal Assistant + Neural Voice + Autonomous Developer Agent
       </Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>🎙️ On-Device Supertonic-3 Voice</Text>
+        <Text style={styles.cardTitle}>On-Device Neural Voice Engine</Text>
         <Text style={styles.cardDesc}>
           Zero latency neural voice engine running locally via ONNX Runtime.
         </Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>💻 Termux & HITL Controls</Text>
+        <Text style={styles.cardTitle}>Termux & HITL Controls</Text>
         <Text style={styles.cardDesc}>
           Integrated shell terminal with Human-In-The-Loop approval modes.
         </Text>
