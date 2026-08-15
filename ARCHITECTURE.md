@@ -1,23 +1,145 @@
 # Const AI Mobile — System Architecture & Blueprint
 
-**Version:** 3.1.0 (On-Device Neural Voice & Autonomous Developer Edition)  
+**Version:** 3.2.0 (On-Device Neural Voice, Android Device OS Operator & Shizuku Privileged Edition)  
 **Repository:** `D:/code/platform/const-ai-mobile`  
-**Identity:** Personal Assistant + Autonomous Coding Agent + On-Device Voice AI Engine  
-**Core Stack:** React Native Expo (Android Standalone & iOS Companion) + Next.js 15 Web Dashboard + Convex Real-Time Backend + Supertone Supertonic-3 (Local ONNX TTS)
+**Identity:** Personal Assistant + Autonomous Phone OS Operator + Coding Agent + On-Device Voice AI Engine  
+**Core Stack:** React Native Expo Prebuild (Custom Native Kotlin Modules) + Next.js 15 Web Dashboard + Convex Real-Time Backend + Supertone Supertonic-3 (Local ONNX TTS) + Shizuku Privileged API & Android Accessibility Service
 
 ---
 
 ## 1. Executive Summary & Product Vision
 
-Const AI adalah ekosistem AI Agent mandiri multi-fungsi yang menggabungkan empat pilar utama:
-1. **Personal Productivity Assistant**: Mengelola jadwal harian, merangkum email dan pesan, pengingat kontekstual, pencatatan otomatis, dan interaksi percakapan natural.
-2. **On-Device Neural Voice Engine (Supertonic-3)**: Sistem Text-to-Speech (TTS) neural lokal berkecepatan tinggi (~99M parameter) yang berjalan di perangkat dengan latensi rendah, tanpa biaya API server, mendukung *emotion tags*, dan *custom voice styles*.
-3. **Autonomous Coding & DevOps Agent**: Menulis kode, membaca repositori Git, menjalankan build, mengedit berkas secara otomatis, dan mengeksekusi terminal shell.
-4. **Background Automation Engine**: Menjalankan tugas terjadwal (*Scheduled Tasks*) 24/7 di latar belakang menggunakan Convex Cron, MCP, dan Composio.
+Const AI adalah ekosistem AI Agent mandiri multi-fungsi yang menggabungkan lima pilar utama:
+1. **Android Device OS Operator (Local Phone Agent)**: Mengelola sistem internal HP secara langsung—membaca dan menghapus kontak, memindai dan membersihkan foto duplikat/screenshot lama, membersihkan file sampah/cache penyimpanan, membuka dan mengelola aplikasi, serta mengontrol setelan hardware HP secara instan.
+2. **Autonomous UI Automation (Accessibility Spatial Loop)**: Mengoperasikan aplikasi pihak ketiga (WhatsApp, Gojek, YouTube, Shopee, browser, dll.) secara visual menggunakan *Android Accessibility Service* dengan *Coordinate-Based Spatial Interaction* yang beroperasi secara iteratif (Continuous Feedback Loop).
+3. **Privileged System Control (Shizuku Prebuilt Bridge)**: Mengakses folder terproteksi Android modern (`/Android/data`, `/Android/obb`), melakukan *silent uninstall*, membersihkan cache sistem, dan mengeksekusi perintah ADB privileged tanpa memerlukan akses Root.
+4. **On-Device Neural Voice Engine (Supertonic-3)**: Sistem Text-to-Speech (TTS) neural lokal berkecepatan tinggi (~99M parameter) yang berjalan di perangkat dengan latensi rendah, tanpa biaya API server, mendukung *emotion tags*, dan *custom voice styles*.
+5. **Autonomous Coding & DevOps Agent (Termux & Desktop Companion)**: Menjalankan eksekusi terminal shell bash/zsh, git, node, dan python di lingkungan Linux Termux (Android Standalone) atau Desktop PC Daemon.
 
 ---
 
-## 2. On-Device Neural Voice Engine (Supertonic-3 Integration)
+## 2. Dual-Engine Android Execution Architecture
+
+Untuk kecepatan dan stabilitas maksimal, Const AI membagi eksekusi di Android menjadi dua jalur utama: **Direct Native Fast-Path** dan **Visual Accessibility Loop**.
+
+```mermaid
+graph TD
+    UserQuery[User Command: Voice / Chat / Scheduled Cron] --> Router{Agent Task Classifier}
+
+    subgraph "Path 1: Direct Native Fast-Path (< 100ms)"
+        Router -->|Kontak, File, Media, Hardware, App Launch| DirectNative[Direct Native Kotlin Modules]
+        DirectNative --> C1[ContactsContract: Query/Delete Kontak]
+        DirectNative --> C2[MediaStore & Storage: Scan Duplicate Photos / Clean Junk]
+        DirectNative --> C3[PackageManager: Launch App / List Installed]
+        DirectNative --> C4[Hardware APIs: Flashlight, Volume, WiFi, Battery]
+        DirectNative --> ShizukuBridge[Shizuku Privileged Bridge: /Android/data, Silent Uninstall]
+    end
+
+    subgraph "Path 2: Visual Accessibility Loop (Multi-Step)"
+        Router -->|Otomasi UI Aplikasi Pihak Ketiga| AccessLoop[ConstAccessibilityService]
+        AccessLoop --> A1[1. Parse UI Tree & Hitung Titik Tengah Koordinat X,Y]
+        A1 --> A2[2. Kirim UI State Snapshot ke LLM]
+        A2 --> A3[3. LLM Menghasilkan Action: Tap X,Y / Type / Scroll]
+        A3 --> A4[4. dispatchGesture Native Execution]
+        A4 -->|Verifikasi State Layar Baru| AccessLoop
+    end
+
+    subgraph "Path 3: Linux Shell & Coding Engine"
+        Router -->|Eksekusi Bash / Python / Git| TermuxBridge[com.termux.RUN_COMMAND]
+        TermuxBridge --> TermuxEnv[Termux Linux Packages]
+    end
+```
+
+---
+
+## 3. Shizuku Integration & File System Access (Folder Terkunci)
+
+### A. Apa itu Shizuku dan Kenapa Digunakan?
+Pada Android 11 ke atas (Android 11, 12, 13, 14, dan 15), Google membatasi akses ke direktori `/Android/data` dan `/Android/obb` menggunakan *Scoped Storage* dan *Storage Access Framework (SAF)*. Selain itu, uninstal aplikasi standar memerlukan dialog konfirmasi sistem.
+
+Dengan **Shizuku API**, Const AI memperoleh hak istimewa setingkat **ADB Shell** tanpa me-root perangkat:
+1. **Membaca & Membersihkan Folder Terkunci:** Mengakses `/sdcard/Android/data` untuk membersihkan sisa cache aplikasi, file sampah game, dan data thumbnail usang.
+2. **Silent App Management:** Menghapus atau membekukan bloatware/aplikasi tanpa popup konfirmasi sistem berulang-ulang via `pm uninstall <pkg>` atau `pm disable-user <pkg>`.
+3. **Deep System Cache Trimming:** Memanggil `pm trim-caches` untuk mengosongkan RAM dan penyimpanan sistem seketika.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as Const AI Mobile (APK Prebuilt)
+    participant ShizukuSDK as Shizuku Client SDK (rikka.shizuku)
+    participant ShizukuService as Shizuku Server (System Process)
+    participant OS as Android OS (ADB Privileges)
+
+    Note over App,ShizukuSDK: SDK sudah ter-bundel di dalam APK
+    App->>ShizukuSDK: Shizuku.pingBinder()
+    ShizukuSDK->>ShizukuService: Check Service Active
+    ShizukuService-->>App: Service Ready (Permission Granted)
+    
+    App->>ShizukuSDK: Execute: "rm -rf /sdcard/Android/data/com.junk.cache/*"
+    ShizukuSDK->>ShizukuService: newProcess(["sh", "-c", "..."])
+    ShizukuService->>OS: Execute with ADB Shell UID
+    OS-->>App: Return stdout / Exit Code 0 (Success)
+```
+
+### B. Status "Prebuild" & Pengalaman Pengguna (Zero In-Code Setup):
+* **Di Sisi Aplikasi:** Kode Shizuku (`rikka.shizuku:api` dan `rikka.shizuku:provider`) **sudah 100% ter-prebuild di dalam APK Const AI**. Pengguna tidak perlu memodifikasi kode apa pun.
+* **Di Sisi Pengguna:** 
+  * Pengguna hanya perlu mengaktifkan Shizuku sekali saja di HP menggunakan fitur bawaan Android **Wireless Debugging** (tersedia di Android 11+ di menu Developer Options).
+  * Saat pertama kali Const AI dibuka, akan muncul dialog 1x klik: *"Izinkan Const AI mengakses Shizuku"*.
+* **Graceful Degradation (Fallback):**
+  * Jika Shizuku belum diaktifkan pengguna, Const AI otomatis beralih (*fallback*) ke **Standard Storage Access Framework (SAF)** dan **Android Native APIs**, sehingga aplikasi tetap berfungsi normal untuk semua tugas umum.
+
+---
+
+## 4. Android Accessibility Service & Spatial Coordinates Loop
+
+Terinspirasi dari pendekatan *PrivateAgent* dan arsitektur *Mobile-Agent*, Const AI menyematkan engine otomasi UI tingkat native:
+
+```kotlin
+// Contoh Native Kotlin: ConstAccessibilityService.kt
+class ConstAccessibilityService : AccessibilityService() {
+
+    // 1. Ekstraksi UI Hierarchy menjadi Spatial Coordinate Map
+    fun extractInteractiveElements(): List<UIElement> {
+        val elements = mutableListOf<UIElement>()
+        val rootNode = rootInActiveWindow ?: return elements
+        
+        fun traverse(node: AccessibilityNodeInfo) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (node.isClickable || node.isEditable || node.isScrollable) {
+                elements.add(UIElement(
+                    id = elements.size + 1,
+                    text = node.text?.toString() ?: node.contentDescription?.toString() ?: "",
+                    className = node.className?.toString() ?: "",
+                    bounds = listOf(rect.left, rect.top, rect.right, rect.bottom),
+                    centerX = rect.centerX(),
+                    centerY = rect.centerY(),
+                    isClickable = node.isClickable,
+                    isEditable = node.isEditable
+                ))
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { traverse(it) }
+            }
+        }
+        traverse(rootNode)
+        return elements
+    }
+
+    // 2. Simulasi Tap Berbasis Koordinat (Mendukung Icon Tanpa Teks)
+    fun performTap(x: Float, y: Float) {
+        val path = Path().apply { moveTo(x, y) }
+        val stroke = GestureDescription.StrokeDescription(path, 0, 80)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        dispatchGesture(gesture, null, null)
+    }
+}
+```
+
+---
+
+## 5. On-Device Neural Voice Engine (Supertonic-3 Integration)
 
 Sistem suara Const AI dirancang dengan prinsip **Zero API Cost**, **Zero Network Latency**, dan **Privacy/Offline Ready**.
 
@@ -36,37 +158,11 @@ graph TD
 * **Format:** ONNX Runtime (`.onnx`) dioptimalkan untuk CPU/NPU perangkat (*NNAPI* di Android, *CoreML* di iOS).
 * **Kualitas Audio:** 44.1 kHz 16-bit WAV (Studio Quality).
 * **Bahasa:** 31 Bahasa (Multilingual tanpa adapter tambahan).
-* **Emotion & Expression Tags:** Mendukung tag natural seperti `<laugh>`, `<breath>`, `<sigh>` yang dapat disisipkan langsung oleh LLM dalam prompt percakapan.
-
-### B. Strategi On-Demand Model Download (Asset Manager)
-* **Ukuran Distribusi Ramping:** Berkas installer aplikasi tetap berukuran kecil (<50 MB) tanpa membundel berkas bobot model secara langsung.
-* **In-App Model Downloader:**
-  * Saat pertama kali pengguna mengaktifkan Voice Mode atau di menu Pengaturan, aplikasi menyediakan opsi unduh: *"Download Voice Model Pack (~250 MB) untuk pemrosesan suara lokal."*
-  * Model diunduh dari CDN/Hugging Face sekali saja ke `FileSystem.documentDirectory` dengan indikator progres unduhan dan verifikasi integritas *SHA-256 Checksum*.
-* **Status Model:** Tersimpan di penyimpanan lokal perangkat dan dicatat statusnya di konfigurasi pengguna.
-
-### C. Custom Voice System & Presets
-* **Preset Suara Bawaan:**
-  * `M1` / `M2`: Persona Formal & Professional Male.
-  * `F1` / `F2`: Persona Friendly & Natural Female.
-  * `M3–M5` & `F3–F5`: Persona Casual, Storyteller, dan Energetic.
-* **Custom Voice Styles:**
-  * Berkas *voice style* Supertonic berukuran ringkas (JSON ~beberapa KB).
-  * Pengguna dapat mengimpor berkas `voice_style.json` kustom, atau memilih dari galeri persona suara di Web Control Center / Mobile App.
+* **Emotion & Expression Tags:** Mendukung tag natural seperti `<laugh>`, `<breath>`, `<sigh>` yang disisipkan oleh LLM.
 
 ---
 
-## 3. Analisis Platform iOS & Strategi Companion
-
-### Pola Integrasi Komputasi Jarak Jauh
-* **Jika iOS Standalone (Tanpa Mac/PC)**: Pengguna iOS dapat menggunakan fitur Personal Assistant: Chat, Natural Voice (Supertonic via CoreML), Natural Language Settings, Notes, Scheduled Tasks (Composio: Gmail, Notion, Calendar), Web Search, dan Analisis Data. Fitur yang dibatasi oleh lingkungan sandbox iOS hanyalah eksekusi shell lokal.
-* **Jika iOS Terhubung ke Mac/PC (Remote Companion)**: Melalui pairing kode QR ke daemon desktop, perangkat iOS memiliki kapabilitas penuh untuk mengontrol agen coding dan terminal PC dari jarak jauh.
-
----
-
-## 4. 4 Mode Eksekusi & Keamanan (Agent Operating Modes)
-
-Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui percakapan atau Web Dashboard:
+## 6. 4 Mode Eksekusi & Matriks Keamanan (Governance)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -84,37 +180,10 @@ Pengguna dapat memilih atau mengganti mode kerja agent kapan saja melalui percak
 └────────────────────┴────────────────────┴──────────────────────┴───────────────────────┘
 ```
 
----
-
-## 5. Android Termux Terminal & Background Service Architecture
-
-Agar proses kompilasi dan terminal shell di Android dapat berjalan terus-menerus di latar belakang tanpa dihentikan oleh sistem operasi:
-
-```mermaid
-graph TD
-    A[Mobile App UI - React Native Expo] -->|IPC / Local Socket| B[Termux / PRoot Engine]
-    A -->|Foreground Service Notification| C[Android OS WorkManager & Wakelock]
-    B -->|Background Output Streaming| D[Convex Realtime Relay]
-    D -->|Push Notification| A
-    C -->|Mencegah Doze Mode| B
-```
-
-1. **Integrated In-App Terminal View**: Tab terminal khusus di dalam aplikasi mobile untuk memantau output shell bash/zsh, npm, python, dan git.
-2. **Android Foreground Service**: Menampilkan notifikasi persisten di status bar (*"Const AI Agent is running in background"*) sehingga task tidak dibunuh oleh OS Android.
-3. **Wakelock Management**: Menjaga CPU tetap aktif saat mengeksekusi proses kompilasi berdurasi panjang.
-
----
-
-## 6. Natural Language Settings & Long-Term Memory
-
-Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan sehari-hari di chat:
-
-* **Contoh Perintah Konfigurasi:**
-  * *"Ubah persona suara ke preset F1"* -> Memanggil mutasi `userConfigs.updateVoiceStyle`.
-  * *"Ganti model AI aktif ke Claude 3.7 Sonnet"* -> Memanggil mutasi `userConfigs.updateModel`.
-  * *"Ubah mode kerja ke Plan Mode"* -> Memanggil mutasi `userConfigs.updateMode`.
-  * *"Set batas anggaran sesi ini maksimal $1"* -> Memanggil mutasi `userConfigs.updateSpendCap`.
-  * *"Ingat bahwa saya selalu prefer framework Tailwind dan Expo"* -> Menyimpan entri ke tabel `memories`.
+### Android Action Safety Policy:
+* 🟢 **Low Risk (Auto-Executed):** Read Contacts, Scan Junk Files, List Installed Apps, Check Battery/WiFi, Launch App, Read Notifications.
+* 🟡 **Medium Risk (Prompt in Ask-Mode):** Delete Junk Cache, Delete Duplicate Photos, Send WhatsApp message, Run standard Shell command.
+* 🔴 **Critical Risk (Always Prompt / Biometric):** Silent Uninstall System Apps, Format Storage, Transfer/Payment Actions in Banking Apps, Delete Essential Contacts.
 
 ---
 
@@ -151,13 +220,12 @@ Pengguna dapat mengubah konfigurasi sistem langsung melalui bahasa percakapan se
 │          (100% Standalone di HP)             │ │       (Life Assistant + PC Companion)  │
 ├──────────────────────────────────────────────┤ ├────────────────────────────────────────┤
 │ - Voice UI (Supertonic ONNX Mobile Engine)   │ │ - Voice UI (Supertonic CoreML Engine)  │
-│ - In-App Model & Voice Pack Asset Manager    │ │ - In-App Model & Voice Pack Manager    │
-│ - Embedded Termux View & Background Service  │ │ - In-App Notes & Scheduled Tasks       │
-│ - Local File System & System Bridge          │ │ - Cloud MCP & Composio Operator        │
-│ - In-App Notes & Task Notifications          │ │ - Remote PC Terminal & Code Control    │
-└──────────────────────────────────────────────┘ └───────────────────▲────────────────────┘
-                                                                     │
-                                                    Zero-Trust Relay │ (Convex Relay / WebRTC)
+│ - Device OS Operator (Contacts/Media/Junk)   │ │ - In-App Notes & Scheduled Tasks       │
+│ - Accessibility Spatial UI Controller        │ │ - Cloud MCP & Composio Operator        │
+│ - Shizuku Privileged Bridge (/Android/data)  │ │ - Remote PC Terminal & Code Control    │
+│ - Termux CLI Runner (Node, Python, Git)      │ └───────────────────▲────────────────────┘
+│ - In-App Notes & Notification Listener       │                     │
+└──────────────────────────────────────────────┘    Zero-Trust Relay │ (Convex Relay / WebRTC)
                                                                      ▼
                                                  ┌────────────────────────────────────────┐
                                                  │          DESKTOP DAEMON (PC)           │
@@ -253,6 +321,8 @@ export default defineSchema({
     isOnline: v.boolean(),
     lastPingAt: v.number(),
     localModelDownloaded: v.optional(v.boolean()),
+    shizukuActive: v.optional(v.boolean()),
+    accessibilityActive: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   devicePairings: defineTable({
@@ -315,6 +385,7 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     targetDeviceId: v.id("devices"),
     toolName: v.string(),
+    actionType: v.union(v.literal("shell_command"), v.literal("device_control"), v.literal("file_delete")),
     command: v.string(),
     workingDir: v.optional(v.string()),
     diffContent: v.optional(v.string()),
@@ -364,20 +435,26 @@ export default defineSchema({
 
 ## 9. Monorepo Structure (Turborepo)
 
-Struktur monorepo untuk menyatukan Mobile, Web, dan Backend dalam 1 repository:
-
 ```text
 const-ai-mobile/
 ├── apps/
-│   ├── mobile/                          # React Native (Expo) - Android & iOS
-│   │   ├── app/                         # Expo Router (Chat, Terminal, Voice, Settings)
+│   ├── mobile/                          # React Native (Expo Prebuild / Native Modules)
+│   │   ├── android/                     # Prebuilt Android Native Layer
+│   │   │   └── app/src/main/java/com/constai/mobile/
+│   │   │       ├── accessibility/       # ConstAccessibilityService & UI Spatial Parser
+│   │   │       ├── shizuku/             # Shizuku Privileged Bridge (/Android/data, silent uninstall)
+│   │   │       ├── device/              # DeviceOperator (Contacts, MediaStore, Junk Cleaner)
+│   │   │       └── termux/              # TermuxIntentBridge & Terminal TCP Socket
+│   │   ├── app/                         # Expo Router (Chat, Terminal, Device, Voice, Settings)
 │   │   ├── components/
 │   │   │   ├── voice/                   # VoiceVisualizer, ModelDownloaderModal, VoiceStylePicker
 │   │   │   ├── terminal/                # In-App Termux View & Shell Stream
+│   │   │   ├── device/                  # Device Clean Cards, Contact Sync, Shizuku Status Badge
 │   │   │   └── hitl/                    # Approval Modal & Plan Card
 │   │   ├── services/
 │   │   │   ├── voice/                   # Supertonic ONNX runner & Audio Queue
-│   │   │   └── termux/                  # Android Foreground Service & Local Socket Bridge
+│   │   │   ├── device/                  # Native Device Bridge Wrapper
+│   │   │   └── accessibility/           # UI Automation Coordinator
 │   │   └── package.json
 │   │
 │   ├── web/                             # Next.js 15 Web Dashboard
@@ -392,7 +469,7 @@ const-ai-mobile/
 │   ├── backend/                         # Convex Realtime Hub (Single Source of Truth)
 │   │   ├── convex/
 │   │   │   ├── schema.ts                # Unified Database Schema
-│   │   │   ├── agent.ts                 # Agent Core & NL Settings Handler
+│   │   │   ├── agent.ts                 # Agent Core & Device Function Calling Tools
 │   │   │   ├── voice.ts                 # Voice Style Manager & Presets Resolver
 │   │   │   ├── crons.ts                 # Scheduled Task Processor
 │   │   │   └── policyEngine.ts          # 4 Operating Modes Evaluator

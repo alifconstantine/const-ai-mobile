@@ -13,8 +13,21 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as agent from "../agent.js";
+import type * as conversations from "../conversations.js";
+import type * as messages from "../messages.js";
+import type * as pendingActions from "../pendingActions.js";
+import type * as policyEngine from "../policyEngine.js";
+import type * as tools from "../tools.js";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  agent: typeof agent;
+  conversations: typeof conversations;
+  messages: typeof messages;
+  pendingActions: typeof pendingActions;
+  policyEngine: typeof policyEngine;
+  tools: typeof tools;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.

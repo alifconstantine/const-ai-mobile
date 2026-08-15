@@ -101,6 +101,8 @@ export default defineSchema({
     isOnline: v.boolean(),
     lastPingAt: v.number(),
     localModelDownloaded: v.optional(v.boolean()),
+    shizukuActive: v.optional(v.boolean()),
+    accessibilityActive: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   devicePairings: defineTable({
@@ -192,6 +194,7 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     targetDeviceId: v.id("devices"),
     toolName: v.string(),
+    actionType: v.optional(v.union(v.literal("shell_command"), v.literal("device_control"), v.literal("file_delete"))),
     command: v.string(),
     workingDir: v.optional(v.string()),
     diffContent: v.optional(v.string()),
