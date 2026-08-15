@@ -41,10 +41,10 @@ Berikut adalah rincian pemecahan implementasi **sangat mendetil (fitur per fitur
 - [x] **Hardware:** Fungsi `toggleFlashlight()`, `setVolume()`, `getBatteryLevel()`.
 
 ### 2.2. Modul Shizuku Super Privileged (`ShizukuBridgeModule.kt`)
-- [ ] Inisialisasi koneksi Binder ke Shizuku Server (`rikka.shizuku:api`).
-- [ ] Fungsi **Akses Folder Terkunci**: Membaca dan menghapus cache tersembunyi di `/sdcard/Android/data` dan `/sdcard/Android/obb`.
-- [ ] Fungsi **Silent Uninstaller**: Menghapus atau membekukan aplikasi tanpa dialog konfirmasi OS (`pm uninstall <pkg>`).
-- [ ] Fungsi **Deep System Trimming**: Menjalankan `pm trim-caches` dan eksekusi perintah ADB Shell.
+- [x] Inisialisasi koneksi Binder ke Shizuku Server (`rikka.shizuku:api`).
+- [x] Fungsi **Akses Folder Terkunci**: Membaca dan menghapus cache tersembunyi di `/sdcard/Android/data` dan `/sdcard/Android/obb`.
+- [x] Fungsi **Silent Uninstaller**: Menghapus atau membekukan aplikasi tanpa dialog konfirmasi OS (`pm uninstall <pkg>`).
+- [x] Fungsi **Deep System Trimming**: Menjalankan `pm trim-caches` dan eksekusi perintah ADB Shell.
 
 ### 2.3. Layanan Accessibility Spatial Controller (`ConstAccessibilityService.kt`)
 - [ ] Implementasi `AccessibilityService` untuk membaca seluruh tampilan UI aplikasi aktif.

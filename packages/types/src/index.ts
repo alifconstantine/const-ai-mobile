@@ -219,6 +219,14 @@ export interface AccessibilityActionArgs {
 // 5. Privileged Bridges (Shizuku & Termux)
 // ==========================================
 
+export interface ShizukuStatus {
+  isAvailable: boolean;
+  isPermissionGranted: boolean;
+  version?: number;
+  uid?: number;
+  error?: string;
+}
+
 export interface ShizukuCommandArgs {
   command: string;
   workingDir?: string;
@@ -230,6 +238,57 @@ export interface ShizukuCommandResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+}
+
+export interface ShizukuProtectedFileItem {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  lastModified?: number;
+}
+
+export interface ShizukuFolderOperationArgs {
+  action: "list" | "delete" | "calculate_size" | "clear_cache";
+  targetPath: string;
+  recursive?: boolean;
+}
+
+export interface ShizukuFolderOperationResult {
+  path: string;
+  success: boolean;
+  files?: ShizukuProtectedFileItem[];
+  totalSizeBytes?: number;
+  deletedCount?: number;
+  freedBytes?: number;
+  output?: string;
+  error?: string;
+}
+
+export interface ShizukuAppActionArgs {
+  action: "uninstall" | "disable" | "enable" | "force_stop" | "clear_data";
+  packageName: string;
+  keepData?: boolean;
+}
+
+export interface ShizukuAppActionResult {
+  packageName: string;
+  action: string;
+  success: boolean;
+  output?: string;
+  error?: string;
+}
+
+export interface ShizukuTrimCacheArgs {
+  desiredFreeBytes?: number;
+}
+
+export interface ShizukuTrimCacheResult {
+  desiredFreeBytes?: number;
+  freedBytes?: number;
+  success: boolean;
+  output?: string;
+  error?: string;
 }
 
 export interface TermuxCommandArgs {
