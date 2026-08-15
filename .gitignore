@@ -8,10 +8,23 @@ out/
 
 # Expo / React Native
 .expo/
-android/
-ios/
 dist/
 *.orig.*
+
+# Android & iOS Build Artifacts
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/.cxx/
+**/android/local.properties
+**/ios/Pods/
+**/ios/build/
+
 
 # Convex
 .convex/

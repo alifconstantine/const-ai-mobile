@@ -34,11 +34,11 @@ Berikut adalah rincian pemecahan implementasi **sangat mendetil (fitur per fitur
 ## ⚙️ BAGIAN 2: Lapisan Native Android (Kotlin & System Bridges)
 
 ### 2.1. Modul Device Operator (`DeviceOperatorModule.kt`)
-- [ ] **Kontak:** Fungsi `getContacts()`, `searchContacts()`, `addContact()`, `deleteContact()` via `ContactsContract`.
-- [ ] **Foto & Galeri:** Fungsi `scanDuplicatePhotos()`, `scanScreenshots(days)`, `deletePhotos(ids)` via `MediaStore`.
-- [ ] **Pembersih File Sampah:** Fungsi `scanJunkStorage()` (mendeteksi file `.tmp`, installer `.apk` lama, sisa download) & `cleanJunkFiles()`.
-- [ ] **Aplikasi:** Fungsi `getInstalledApps()` dan `launchApp(packageName)` via `PackageManager`.
-- [ ] **Hardware:** Fungsi `toggleFlashlight()`, `setVolume()`, `getBatteryLevel()`.
+- [x] **Kontak:** Fungsi `getContacts()`, `searchContacts()`, `addContact()`, `deleteContact()` via `ContactsContract`.
+- [x] **Foto & Galeri:** Fungsi `scanDuplicatePhotos()`, `scanScreenshots(days)`, `deletePhotos(ids)` via `MediaStore`.
+- [x] **Pembersih File Sampah:** Fungsi `scanJunkStorage()` (mendeteksi file `.tmp`, installer `.apk` lama, sisa download) & `cleanJunkFiles()`.
+- [x] **Aplikasi:** Fungsi `getInstalledApps()` dan `launchApp(packageName)` via `PackageManager`.
+- [x] **Hardware:** Fungsi `toggleFlashlight()`, `setVolume()`, `getBatteryLevel()`.
 
 ### 2.2. Modul Shizuku Super Privileged (`ShizukuBridgeModule.kt`)
 - [ ] Inisialisasi koneksi Binder ke Shizuku Server (`rikka.shizuku:api`).
