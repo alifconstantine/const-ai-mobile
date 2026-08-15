@@ -1,6 +1,7 @@
 package com.constai.mobile
 
 import android.app.Application
+import com.constai.mobile.accessibility.AccessibilityPackage
 import com.constai.mobile.device.DeviceOperatorPackage
 import com.constai.mobile.shizuku.ShizukuPackage
 import com.facebook.react.PackageList
@@ -20,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
                 // Custom Native Kotlin Modules
                 packages.add(DeviceOperatorPackage())
                 packages.add(ShizukuPackage())
+                packages.add(AccessibilityPackage())
                 return packages
             }
 

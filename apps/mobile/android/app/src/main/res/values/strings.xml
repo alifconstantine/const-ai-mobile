@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Const AI</string>
+    <string name="accessibility_service_label">Const AI Accessibility Automation</string>
+    <string name="accessibility_service_description">Enables Const AI to autonomously assist with screen perception and spatial gesture execution across third-party applications.</string>
+</resources>

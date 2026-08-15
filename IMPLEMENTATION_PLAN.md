@@ -47,9 +47,9 @@ Berikut adalah rincian pemecahan implementasi **sangat mendetil (fitur per fitur
 - [x] Fungsi **Deep System Trimming**: Menjalankan `pm trim-caches` dan eksekusi perintah ADB Shell.
 
 ### 2.3. Layanan Accessibility Spatial Controller (`ConstAccessibilityService.kt`)
-- [ ] Implementasi `AccessibilityService` untuk membaca seluruh tampilan UI aplikasi aktif.
-- [ ] **Spatial Coordinate Parser**: Mengubah hierarki XML UI menjadi array elemen JSON dengan koordinat titik tengah `[center_x, center_y]`.
-- [ ] **Gesture Dispatcher**: Fungsi native untuk simulasi `performTap(x, y)`, `performSwipe(startX, startY, endX, endY)`, `inputText(text)`, dan tombol navigasi `pressBack()`, `pressHome()`.
+- [x] Implementasi `AccessibilityService` untuk membaca seluruh tampilan UI aplikasi aktif.
+- [x] **Spatial Coordinate Parser**: Mengubah hierarki XML UI menjadi array elemen JSON dengan koordinat titik tengah `[center_x, center_y]`.
+- [x] **Gesture Dispatcher**: Fungsi native untuk simulasi `performTap(x, y)`, `performSwipe(startX, startY, endX, endY)`, `inputText(text)`, dan tombol navigasi `pressBack()`, `pressHome()`.
 
 ### 2.4. Modul Termux CLI Intent (`TermuxBridgeModule.kt`)
 - [ ] Pengirim Explicit Intent ke `com.termux.app.RunCommandService` dengan permission `com.termux.permission.RUN_COMMAND`.
