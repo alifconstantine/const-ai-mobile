@@ -1,129 +1,162 @@
-# Granular Implementation Breakdown: Const AI Mobile
+# Granular Implementation Breakdown & Spiral Roadmap: Const AI Mobile
 
-Berikut adalah rincian pemecahan implementasi **sangat mendetil (fitur per fitur, layar per layar, dan modul per modul)** layaknya membangun produk digital komprehensif dari nol:
-
----
-
-## 🧱 BAGIAN 1: Fondasi Backend & Otak AI (`packages/backend` & `packages/types`)
-
-### 1.1. Shared Types Module (`packages/types`)
-- [x] Buat interface **`DeviceTools`**: Parameter untuk Kontak, Media/Foto, Junk Storage, App Management, dan Hardware.
-- [x] Buat interface **`AccessibilityNode`**: Struktur elemen UI layar (`id`, `text`, `bounds`, `centerX`, `centerY`, `clickable`, `editable`).
-- [x] Buat interface **`ShizukuPayload` & `TermuxPayload`**: Struktur data eksekusi perintah sistem dan CLI.
-- [x] Buat interface **`HITLAction` & `OperatingMode`**: Status antrean persetujuan pengguna (`pending`, `approved`, `rejected`).
-
-### 1.2. Database & Schema (`packages/backend/convex/schema.ts`)
-- [x] Buat tabel `users` & `userConfigs` (API keys BYOK, active model, 4 operating modes, voice settings).
-- [x] Buat tabel `devices` & `devicePairings` (Status online HP, status Shizuku, status Accessibility).
-- [x] Buat tabel `conversations` & `messages` (Chat stream, tool calls, token usage & cost).
-- [x] Buat tabel `pendingActions` (Antrean aksi sensitif yang menunggu persetujuan user).
-- [x] Buat tabel `scheduledTasks` (Background Crons & MCP tasks).
-- [x] Buat tabel `voiceStyles` & `memories` (Long-term preference RAG).
-
-### 1.3. Agent Reasoning Engine (`packages/backend/convex/agent.ts`)
-- [x] Buat fungsi pemanggil LLM (OpenRouter / Gemini / Claude / DeepSeek) dengan dukungan **Function Calling Tools**.
-- [x] Buat **Tool Router**: Mengklasifikasikan apakah perintah user harus ke *Direct Native Bridge*, *Accessibility Loop*, *Shizuku*, atau *Termux*.
-- [x] Buat **Natural Language Settings Resolver**: AI dapat mengubah mode, persona suara, atau batas budget langsung dari instruksi chat.
-
-### 1.4. Policy Engine & Safety Guard (`packages/backend/convex/policyEngine.ts`)
-- [x] Logika klasifikasi tingkat risiko aksi (🟢 Low, 🟡 Medium, 🔴 Critical).
-- [x] Logika penahan aksi (*intercept*) ke tabel `pendingActions` jika user berada di *Plan Mode* atau *Ask-Before-Change Mode*.
+> **Execution Strategy:** Iterative Spiral Approach (Mobile UI ➔ Web Basic ➔ Mobile Integration ➔ Web Advanced ➔ Mobile Polish & E2E)  
+> **Current Status:** Phase 1 & 2 Completed ✅ | Stage 1 (Mobile UI Core 3.1) In Progress 🚀
 
 ---
 
-## ⚙️ BAGIAN 2: Lapisan Native Android (Kotlin & System Bridges)
-
-### 2.1. Modul Device Operator (`DeviceOperatorModule.kt`)
-- [x] **Kontak:** Fungsi `getContacts()`, `searchContacts()`, `addContact()`, `deleteContact()` via `ContactsContract`.
-- [x] **Foto & Galeri:** Fungsi `scanDuplicatePhotos()`, `scanScreenshots(days)`, `deletePhotos(ids)` via `MediaStore`.
-- [x] **Pembersih File Sampah:** Fungsi `scanJunkStorage()` (mendeteksi file `.tmp`, installer `.apk` lama, sisa download) & `cleanJunkFiles()`.
-- [x] **Aplikasi:** Fungsi `getInstalledApps()` dan `launchApp(packageName)` via `PackageManager`.
-- [x] **Hardware:** Fungsi `toggleFlashlight()`, `setVolume()`, `getBatteryLevel()`.
-
-### 2.2. Modul Shizuku Super Privileged (`ShizukuBridgeModule.kt`)
-- [x] Inisialisasi koneksi Binder ke Shizuku Server (`rikka.shizuku:api`).
-- [x] Fungsi **Akses Folder Terkunci**: Membaca dan menghapus cache tersembunyi di `/sdcard/Android/data` dan `/sdcard/Android/obb`.
-- [x] Fungsi **Silent Uninstaller**: Menghapus atau membekukan aplikasi tanpa dialog konfirmasi OS (`pm uninstall <pkg>`).
-- [x] Fungsi **Deep System Trimming**: Menjalankan `pm trim-caches` dan eksekusi perintah ADB Shell.
-
-### 2.3. Layanan Accessibility Spatial Controller (`ConstAccessibilityService.kt`)
-- [x] Implementasi `AccessibilityService` untuk membaca seluruh tampilan UI aplikasi aktif.
-- [x] **Spatial Coordinate Parser**: Mengubah hierarki XML UI menjadi array elemen JSON dengan koordinat titik tengah `[center_x, center_y]`.
-- [x] **Gesture Dispatcher**: Fungsi native untuk simulasi `performTap(x, y)`, `performSwipe(startX, startY, endX, endY)`, `inputText(text)`, dan tombol navigasi `pressBack()`, `pressHome()`.
-
-### 2.4. Modul Termux CLI Intent (`TermuxBridgeModule.kt`)
-- [x] Pengirim Explicit Intent ke `com.termux.app.RunCommandService` dengan permission `com.termux.permission.RUN_COMMAND`.
-- [x] Local Socket / Broadcast Receiver untuk streaming live output bash/git/python kembali ke UI.
+```mermaid
+graph LR
+    S1["Tahap 1: Mobile UI Core<br/>(Header, Task Drawer, Review Panel)"] --> S2["Tahap 2: Web Basic<br/>(Login, BYOK Vault & Settings)"]
+    S2 --> S3["Tahap 3: Mobile Data Sync<br/>(Chat Stream, HITL, Input Dock)"]
+    S3 --> S4["Tahap 4: Web Advanced<br/>(Voice Studio, Crons & Analytics)"]
+    S4 --> S5["Tahap 5: Mobile Polish<br/>(On-Device TTS, Terminal & E2E)"]
+```
 
 ---
 
-## 📱 BAGIAN 3: Antarmuka Aplikasi Mobile (`apps/mobile`)
+## 📊 Status Ringkasan Eksekusi
 
-### 3.1. Layar Onboarding & Permission Wizard (`app/onboarding.tsx`)
-- [ ] Tampilan pengenalan fitur Const AI.
-- [ ] Wizard 1-klik untuk meminta izin: Kontak, Storage, dan Panduan buka Accessibility Settings.
-- [ ] Kartu opsional aktivasi Shizuku (Panduan Wireless Debugging).
-
-### 3.2. Layar Utama Chat & AI Stream (`app/(tabs)/index.tsx` & `app/chat/[id].tsx`)
-- [ ] Tampilan list pesan chat (User & Assistant) dengan Markdown rendering.
-- [ ] **Interactive Tool Cards**: Kartu animasi saat AI sedang scan file sampah, menghapus kontak, atau mengontrol layar.
-- [ ] Input bar dengan tombol text, attachment, dan tombol Voice Hands-Free.
-
-### 3.3. Komponen Modal Persetujuan Aksi / HITL Card (`components/hitl/ApprovalModal.tsx`)
-- [ ] Modal pop-up real-time yang muncul saat ada aksi di tabel `pendingActions`.
-- [ ] Menampilkan detail aksi (contoh: *"AI ingin menghapus 12 foto screenshot lama (150 MB)"*) dengan tombol **[Setujui]** dan **[Tolak]**.
-
-### 3.4. Layar Device & Storage Cleaner (`app/(tabs)/device.tsx`)
-- [ ] Gauge / Bar visual kapasitas penyimpanan internal HP.
-- [ ] Status Badge Hak Akses (🟢 Accessibility Aktif, 🟢 Storage Aktif, 🟢/🟡 Shizuku Super Mode).
-- [ ] Tombol **"Quick Scan & Clean"** file sampah satu klik.
-- [ ] Tab Daftar Kontak & Daftar Aplikasi terpasang dengan pencarian cepat.
-
-### 3.5. Layar In-App Terminal CLI (`app/(tabs)/terminal.tsx`)
-- [ ] Terminal view bergaya konsol monospace gelap (menampilkan log eksekusi Termux / Shizuku).
-- [ ] Command input manual untuk testing CLI lokal.
-
-### 3.6. Layar Pengaturan & Persona Suara (`app/(tabs)/settings.tsx`)
-- [ ] Pemilih Mode Kerja AI (Plan Mode, Ask-Before-Change, Standard, Full YOLO).
-- [ ] Pemilih Model AI Aktif (Gemini 2.0 Flash, Claude 3.7 Sonnet, DeepSeek V3).
-- [ ] Galeri Preset Suara Supertonic-3 (M1–M5, F1–F5) dengan tombol tes audio.
-- [ ] In-App Voice Model Downloader (Download pack ~250MB dengan progress bar).
-
-### 3.7. Service Audio On-Device (`services/voice/supertonicPlayer.ts`)
-- [ ] Inisialisasi ONNX Runtime Mobile untuk memutar suara WAV 44.1kHz hasil sintesis lokal.
-- [ ] Visualizer animasi gelombang suara saat AI berbicara.
+| Bagian | Cakupan Fitur | Status |
+| :--- | :--- | :--- |
+| **Fondasi 1** | Backend Schema, Agent Core, Policy Engine (`packages/backend`) | ✅ **SELESAI** |
+| **Fondasi 2** | Native Kotlin Modules & TS Bridges (Device, Shizuku, Accessibility, Termux) | ✅ **SELESAI** |
+| **Tahap 1** | **Mobile UI Core & Navigation Shell (Header, Drawer, Review Panel 3.1)** | ✅ **SELESAI** |
+| **Tahap 2** | Web Dashboard Basic (Login Dev / Alif, BYOK API Key Vault, QR Pairing 4.1-4.3) | 🚀 **BERIKUTNYA** |
+| **Tahap 3** | Mobile Chat Stream, Accordion, HITL Card & Input Dock (3.2 - 3.4) | ⏳ Menunggu Tahap 2 |
+| **Tahap 4** | Web Dashboard Advanced (Voice Studio, Cron Tasks, Token Analytics 4.4-4.6) | ⏳ Menunggu Tahap 3 |
+| **Tahap 5** | Mobile Polish (Supertonic-3 On-Device TTS, Sliding Terminal Drawer, E2E 3.5-3.6) | ⏳ Menunggu Tahap 4 |
 
 ---
 
-## 🌐 BAGIAN 4: Dashboard Web Control Center (`apps/web`)
+## 🧱 FONDASI 1 & 2: Backend & Lapisan Native (Status: SELESAI ✅)
 
-### 4.1. Halaman Login & Otentikasi (`apps/web/app/login/page.tsx`)
-- [ ] Form login email / Google auth terhubung ke Convex.
+### 1. Fondasi Backend & Otak AI (`packages/backend` & `packages/types`)
+- [x] **Shared Types (`packages/types`)**: Interface `DeviceTools`, `AccessibilityNode`, `ShizukuPayload`, `TermuxPayload`, `HITLAction`, `OperatingMode`.
+- [x] **Schema Convex (`schema.ts`)**: Tabel `users`, `userConfigs`, `devices`, `conversations`, `messages`, `pendingActions`, `scheduledTasks`, `voiceStyles`, `memories`.
+- [x] **Agent Reasoning Engine (`agent.ts`)**: LLM transport (OpenRouter/Gemini/Claude), function calling tools dispatching, dynamic prompt builder.
+- [x] **Policy Engine & Safety Guard (`policyEngine.ts`)**: Klasifikasi risiko (🟢 Low, 🟡 Medium, 🔴 Critical) & HITL interception.
+
+### 2. Lapisan Native Android (Kotlin & System Bridges)
+- [x] **Device Operator Module (`DeviceBridge.ts`)**: Kontak (`ContactsContract`), Media/Foto duplikat (`MediaStore`), Junk Cleaner, Installed Apps, Hardware.
+- [x] **Shizuku Super Privileged Module (`ShizukuBridge.ts`)**: Akses folder terproteksi `/sdcard/Android/data`, silent uninstall, `pm trim-caches`.
+- [x] **Accessibility Spatial Controller (`AccessibilityBridge.ts`)**: UI XML hierarchy parsing, coordinate calculator `[centerX, centerY]`, native gesture dispatch.
+- [x] **Termux CLI Intent Bridge (`TermuxBridge.ts`)**: Intent runner ke `com.termux.app.RunCommandService` & socket output stream.
+
+---
+
+## 🚀 TAHAP 1: Mobile UI Core & Navigation Shell (`apps/mobile`) (Status: SELESAI ✅)
+
+### 3.1. Header Bar & Navigation Drawers (`components/navigation/`)
+- [x] **State Management Global Navigasi (`NavigationContext.tsx`)**:
+  - State untuk drawer kiri (`isTaskDrawerOpen`), panel kanan (`isReviewPanelOpen`), drawer bawah terminal (`isTerminalOpen`).
+  - State sesi aktif: `activeConversationId`, `activeWorkspace` (`default` / `const-ai-mobile`), `activeModel`.
+  - State tab review kanan: `activeReviewTab` (`Review`, `Side conversation`, `Terminal`, `Browser`).
+- [x] **Top Header Bar (`HeaderBar.tsx`)**:
+  - Tombol Hamburger `[≡]` untuk memicu Left Task Drawer.
+  - Workspace selector dropdown button (`default` / `const-ai-mobile`) dengan modal popover interaktif.
+  - Active Model Badge (e.g. `Gemini 2.0 Flash` / `Claude 3.7 Sonnet`).
+  - Quick Terminal Toggle `[💻]` (membuka/menutup Bottom Terminal Drawer).
+  - Split / Side Panel Toggle `[⊞]` (membuka/menutup Right Review Panel).
+  - Overflow Menu `[⋮]` (*Pin task*, *Rename task*, *Archive*, *Copy session ID*, *View trajectory*).
+- [x] **Left Task & Project Drawer (`TaskDrawer.tsx`)**:
+  - Tombol Aksi Cepat: `+ New task`, `🔍 Search`, `⏰ Automations`, `🧩 Skills`.
+  - Segmented Filter Switch: `# Group` vs `📁 Project`.
+  - Riwayat Task/Sesi Percakapan terkelompok (*Today*, *Yesterday*, *Previous 7 days* atau per direktori project).
+  - Indikator status task (*Active*, *Awaiting approval badge* hijau berkedip).
+  - Profil Pengguna di footer (*Alif Constantine*, status device `Android • Online`, icon `[⚙️ Settings]`).
+- [x] **Right Side Panel (`ReviewSidePanel.tsx`)**:
+  - Header panel dengan judul file aktif dan tombol tutup `[✕]`.
+  - Tab Switcher: `Review`, `Side conversation`, `Terminal`, `Browser`.
+  - Wadah konten sesuai tab aktif.
+- [x] **Code Diff & Review Viewer (`CodeDiffView.tsx`)**:
+  - Code viewer dengan nomor baris, badge penanda baris hijau `+` dan merah `-` (seperti `server.js +42`).
+  - Action Bar di bagian bawah: `[Review]`, `[Open file]`, `[Undo changes]`.
+- [x] **In-App Quick Settings Modal (`SettingsModal.tsx`)**:
+  - Quick BYOK API Key input lokal, Model picker, dan 4 Operating Mode selector langsung dari HP.
+- [x] **Integrasi Layout Mobile Utama (`app/index.tsx`)**:
+  - Merakit Header, Drawer, Review Panel, dan Area Konten ke dalam satu layout mobile yang responsif dan bebas crash.
+
+---
+
+## 🌐 TAHAP 2: Web Dashboard Basic Functions & BYOK Vault (`apps/web`)
+
+### 4.1. Halaman Login & Dev Profile (`apps/web/app/login/page.tsx`)
+- [ ] Form login email / magic link terhubung ke Convex.
+- [ ] Tombol 1-klik Quick Dev Login (*"Continue as Alif Constantine"*).
 
 ### 4.2. Halaman Dashboard Utama (`apps/web/app/page.tsx`)
-- [ ] Ringkasan perangkat yang terhubung (Status HP Android & Status Desktop Daemon PC).
-- [ ] Statistik sesi chat dan aktivitas tugas harian.
+- [ ] Ringkasan status perangkat (HP Android Online/Offline & Desktop Daemon).
+- [ ] Quick launcher untuk membuka chat session dan riwayat task.
 
-### 4.3. Halaman BYOK API Key Manager (`apps/web/app/settings/keys/page.tsx`)
-- [ ] Form input & enkripsi API Key kustom (OpenRouter, Gemini, Anthropic, OpenAI).
+### 4.3. Halaman BYOK API Key Vault (`apps/web/app/settings/keys/page.tsx`)
+- [ ] Form input & enkripsi API Key kustom (OpenRouter, Gemini, Anthropic, OpenAI) tersimpan ke tabel `userConfigs`.
+- [ ] Indikator status keaktifan masing-masing API key.
 
-### 4.4. Halaman Voice Studio & Custom Styles (`apps/web/app/voice/page.tsx`)
-- [ ] Audio preview preset suara.
-- [ ] Drag-and-drop uploader untuk file kustom `voice_style.json`.
-
-### 4.5. Halaman Scheduled Tasks & Crons (`apps/web/app/tasks/page.tsx`)
-- [ ] Form pembuatan tugas terjadwal (Cron expression, prompt instruksi, attachment tool MCP/Composio).
-- [ ] Switch On/Off dan log riwayat eksekusi background.
-
-### 4.6. Halaman Usage & Token Analytics (`apps/web/app/analytics/page.tsx`)
-- [ ] Grafik konsumsi token harian/bulanan (Recharts).
-- [ ] Estimasi pengeluaran biaya USD ($) per model.
+### 4.4. Halaman Device Pairing & QR Sync (`apps/web/app/devices/page.tsx`)
+- [ ] Generator QR Code dinamis (`const://pair?token=...`) dan 6-digit PIN untuk menghubungkan HP ke Web.
 
 ---
 
-## 🔄 BAGIAN 5: Integrasi & Uji Coba End-to-End
+## 📱 TAHAP 3: Mobile Data Sync & Live Chat Stream (`apps/mobile`)
 
-- [ ] **Skenario 1 (Local Device Fast-Path):** Perintah *"Tolong scan file sampah di HP saya dan hapus kontak yang bernama Test"* dieksekusi instan via Native Module.
-- [ ] **Skenario 2 (UI Automation Multi-Step):** Perintah *"Buka YouTube dan cari video jazz"* dieksekusi via Accessibility spatial loop.
-- [ ] **Skenario 3 (Super-Privileged Shizuku):** Perintah *"Bersihkan cache tersembunyi di /Android/data"* dieksekusi via Shizuku tanpa root.
-- [ ] **Skenario 4 (On-Device Voice):** Respon AI diucapkan langsung menggunakan Supertonic-3 ONNX secara lokal tanpa delay jaringan.
+### 3.2. Main Chat Stream & Interaksi Komponen (`app/index.tsx`)
+- [ ] Sinkronisasi realtime keys dan config dari Convex ke Mobile.
+- [ ] **User Message Card**: Teks prompt gelap modern + footer tombol **`[📋 Copy]`** dan **`[✏️ Edit]`** (dengan aksi rewind).
+- [ ] **AI Response & Execution Activity**:
+  - **Accordion *"Worked for 44s v"***: Rincian sub-langkah eksekusi tools (`Ran $ curl ...`, `Wrote 📄 server.js +42`, dll.).
+  - **Main Markdown Output**: Render Markdown, sintaks kode, dan tabel.
+  - **Action Cards**: Web Preview Card (`localhost:8000`), File Changes Diff Card (`> 1 file changed +42`), Device Storage/Contact Card.
+  - **AI Message Footer**: `[Copy]`, `[👍 Good response]`, `[👎 Bad response]`, `[🔊 Play Neural Voice]`.
+
+### 3.3. Komponen Persetujuan Izin & Keamanan HITL (`components/hitl/`)
+- [ ] **Permission Required Card (`PermissionRequiredCard.tsx`)**:
+  - Header badge `Permission required` & `Awaiting approval` berkedip.
+  - Code Block command yang diminta.
+  - 3 Radio Options: `1. Allow (1x)`, `2. Always allow in this project`, `3. Deny`.
+  - Tombol **`[Confirm]`**.
+
+### 3.4. AI Multiline Input Dock (`components/chat/ChatInputDock.tsx`)
+- [ ] **Floating HITL Notification Bar** di atas input box saat ada aksi tertunda.
+- [ ] **Multiline Input Box** dengan placeholder informatif.
+- [ ] **Bottom Action Bar**:
+  - Tombol **`[+]`** (Attachment, @ mention, / skill commands).
+  - **Context Window Meter Pill** (e.g. `218.6K/1M (21.9%)` & cache hit `91.3%`).
+  - **Operating Mode Selector Pill** (Dropdown 4 mode).
+  - **Model Selector Pill** (Dropdown model).
+  - **Voice Hands-Free Button `[🎙️]`** & Tombol Kirim **`[⬆️]`**.
+
+---
+
+## 🌐 TAHAP 4: Web Dashboard Advanced Features (`apps/web`)
+
+### 4.5. Halaman Voice Studio & Preset Gallery (`apps/web/app/voice/page.tsx`)
+- [ ] Audio preview preset suara Supertonic-3 (M1-M5, F1-F5).
+- [ ] Drag-and-drop uploader file kustom `voice_style.json` tersimpan ke tabel `voiceStyles`.
+
+### 4.6. Halaman Scheduled Tasks & Crons (`apps/web/app/tasks/page.tsx`)
+- [ ] Form pembuatan tugas background 24/7 (Cron expression, prompt instruksi, attachment tools MCP/Composio).
+- [ ] Log riwayat eksekusi background realtime.
+
+### 4.7. Halaman Token & Cost Analytics (`apps/web/app/analytics/page.tsx`)
+- [ ] Visualisasi grafik konsumsi token harian/bulanan (Recharts).
+- [ ] Estimasi pengeluaran biaya USD ($) per model dan sesi.
+
+---
+
+## 📱 TAHAP 5: Fitur Lengkap & Polish Mobile (`apps/mobile` & E2E)
+
+### 3.5. Sliding Terminal Drawer (`components/terminal/TerminalDrawer.tsx`)
+- [ ] Sliding bottom sheet drawer yang dapat ditarik naik-turun.
+- [ ] Multi-tab console: `Terminal`, `PowerShell`, `Termux Linux`, `Shizuku ADB`.
+- [ ] Streaming stdout/stderr output real-time dengan command input line interaktif.
+
+### 3.6. On-Device Neural Voice TTS Player (`services/voice/supertonicPlayer.ts`)
+- [ ] Audio synthesizer & queue player untuk memutar audio WAV 44.1kHz Supertonic-3.
+- [ ] Voice waveform animation widget saat audio berbunyi.
+
+### 5.0. Verifikasi End-to-End di Perangkat Android Fisik
+- [ ] **Skenario 1 (Local Fast-Path):** Clean storage & sync contacts via Native Kotlin.
+- [ ] **Skenario 2 (UI Automation):** Navigasi YouTube/Gojek via Accessibility Spatial Coordinate.
+- [ ] **Skenario 3 (Shizuku Privileged):** Bersihkan cache terproteksi `/Android/data` tanpa root.
+- [ ] **Skenario 4 (On-Device Voice):** Respon AI bersuara instan via Supertonic-3 offline.
