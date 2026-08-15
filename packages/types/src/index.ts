@@ -309,8 +309,8 @@ export interface TermuxCommandArgs {
 
 export interface TermuxCommandResult {
   exitCode: number;
-  stdout?: string;
-  stderr?: string;
+  stdout: string;
+  stderr: string;
   output: string;
   durationMs?: number;
   error?: string;
