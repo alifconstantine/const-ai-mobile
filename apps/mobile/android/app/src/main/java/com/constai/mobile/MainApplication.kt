@@ -4,6 +4,7 @@ import android.app.Application
 import com.constai.mobile.accessibility.AccessibilityPackage
 import com.constai.mobile.device.DeviceOperatorPackage
 import com.constai.mobile.shizuku.ShizukuPackage
+import com.constai.mobile.termux.TermuxPackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactNativeHost
@@ -22,6 +23,7 @@ class MainApplication : Application(), ReactApplication {
                 packages.add(DeviceOperatorPackage())
                 packages.add(ShizukuPackage())
                 packages.add(AccessibilityPackage())
+                packages.add(TermuxPackage())
                 return packages
             }
 

@@ -291,16 +291,28 @@ export interface ShizukuTrimCacheResult {
   error?: string;
 }
 
+export interface TermuxStatus {
+  isInstalled: boolean;
+  isPermissionGranted: boolean;
+  version: string;
+  error?: string;
+}
+
 export interface TermuxCommandArgs {
   script: string;
   workingDir?: string;
   background?: boolean;
+  sessionAction?: string;
   sessionName?: string;
+  timeoutMs?: number;
 }
 
 export interface TermuxCommandResult {
   exitCode: number;
+  stdout?: string;
+  stderr?: string;
   output: string;
+  durationMs?: number;
   error?: string;
 }
 

@@ -52,8 +52,8 @@ Berikut adalah rincian pemecahan implementasi **sangat mendetil (fitur per fitur
 - [x] **Gesture Dispatcher**: Fungsi native untuk simulasi `performTap(x, y)`, `performSwipe(startX, startY, endX, endY)`, `inputText(text)`, dan tombol navigasi `pressBack()`, `pressHome()`.
 
 ### 2.4. Modul Termux CLI Intent (`TermuxBridgeModule.kt`)
-- [ ] Pengirim Explicit Intent ke `com.termux.app.RunCommandService` dengan permission `com.termux.permission.RUN_COMMAND`.
-- [ ] Local Socket / Broadcast Receiver untuk streaming live output bash/git/python kembali ke UI.
+- [x] Pengirim Explicit Intent ke `com.termux.app.RunCommandService` dengan permission `com.termux.permission.RUN_COMMAND`.
+- [x] Local Socket / Broadcast Receiver untuk streaming live output bash/git/python kembali ke UI.
 
 ---
 
