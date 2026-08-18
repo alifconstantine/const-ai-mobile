@@ -10,11 +10,8 @@ import { api } from "@const-ai/backend";
 import {
   LayoutDashboard,
   Settings,
-  Smartphone,
   LogOut,
-  ShieldCheck,
   Loader2,
-  Lock,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -43,39 +40,35 @@ export default function DashboardLayout({
   // Sync session & Authenticated Route Guard Check
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // 1. If Clerk is signed in
       if (clerkIsSignedIn && clerkUser) {
         setIsAuthenticated(true);
         setUserProfile({
-          name: clerkUser.fullName || clerkUser.firstName || "Alif Constantine",
+          name: clerkUser.fullName || clerkUser.firstName || "Operator",
           username:
             clerkUser.username ||
             clerkUser.primaryEmailAddress?.emailAddress?.split("@")[0] ||
-            "alif",
+            "operator",
           avatarUrl: clerkUser.imageUrl || undefined,
-          email: clerkUser.primaryEmailAddress?.emailAddress || "alif@constai.platform",
+          email: clerkUser.primaryEmailAddress?.emailAddress || "operator@constai.platform",
         });
         return;
       }
 
-      // 2. If liveViewer returns from Convex backend
       if (liveViewer) {
         setIsAuthenticated(true);
         setUserProfile({
-          name: liveViewer.name || "Alif Constantine",
-          username: liveViewer.username || "alif",
+          name: liveViewer.name || "Operator",
+          username: liveViewer.username || "operator",
           avatarUrl: liveViewer.avatarUrl || liveViewer.image || undefined,
-          email: liveViewer.email || "alif@constai.platform",
+          email: liveViewer.email || "operator@constai.platform",
         });
         return;
       }
 
-      // Wait if Clerk is still initializing
       if (!clerkIsLoaded) {
         return;
       }
 
-      // Not authenticated -> Redirect to /sign-in
       setIsAuthenticated(false);
       const timer = setTimeout(() => {
         router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
@@ -104,7 +97,7 @@ export default function DashboardLayout({
         </div>
         <div className="flex items-center gap-2 text-zinc-400 text-xs font-mono">
           <Loader2 className="w-4 h-4 animate-spin text-zinc-300" />
-          <span>Verifying authentication & vault access...</span>
+          <span>Verifying authentication & workspace access...</span>
         </div>
       </div>
     );
@@ -141,7 +134,7 @@ export default function DashboardLayout({
                   Const AI
                 </span>
                 <span className="text-[10px] text-zinc-500 font-mono block">
-                  Control Center v3.2
+                  Control Center
                 </span>
               </div>
             </Link>
@@ -164,30 +157,6 @@ export default function DashboardLayout({
               </Link>
             ))}
           </nav>
-
-          {/* Quick Hardware Status Snippet */}
-          <div className="mt-8 p-3 rounded-2xl bg-zinc-900/70 border border-zinc-800/90 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-zinc-300 flex items-center gap-1.5">
-                <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
-                Mobile Device
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Synced
-              </span>
-            </div>
-            <div className="space-y-1 text-[10px] text-zinc-400">
-              <div className="flex justify-between">
-                <span>Shizuku Bridge:</span>
-                <span className="text-emerald-400 font-mono">ACTIVE</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Voice Engine:</span>
-                <span className="text-zinc-200 font-mono">Supertonic-3</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* User Profile Footer */}

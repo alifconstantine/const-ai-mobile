@@ -19,7 +19,6 @@ import {
   Mic,
   Cpu,
   ShieldAlert,
-  Smartphone,
   Check,
   Save,
   Loader2,
@@ -37,11 +36,6 @@ import {
   Download,
   Play,
   Search,
-  Filter,
-  CheckSquare,
-  Square,
-  Layers,
-  Sparkles,
 } from "lucide-react";
 
 export interface CustomModelItem {
@@ -85,7 +79,7 @@ const INITIAL_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
 
 export default function SettingsHubPage() {
   const [activeTab, setActiveTab] = useState<
-    "models_hub" | "persona" | "voice" | "operating_mode" | "devices"
+    "models_hub" | "persona" | "voice" | "operating_mode"
   >("models_hub");
 
   const [isSaving, setIsSaving] = useState(false);
@@ -376,7 +370,6 @@ export default function SettingsHubPage() {
 
       if (data.success && data.models && data.models.length > 0) {
         setDiscoveredCandidates(data.models);
-        // Pre-select models that are already in editModels
         const existing = new Set(editModels.map((m) => m.id));
         setSelectedCandidates(existing);
         setIsImportModalOpen(true);
@@ -417,7 +410,7 @@ export default function SettingsHubPage() {
     setIsImportModalOpen(false);
     setFetchNotification({
       type: "success",
-      message: `Successfully imported ${selectedCandidates.size} selected model(s)!`,
+      message: `Successfully updated models list (${selectedCandidates.size} models).`,
     });
   };
 
@@ -590,7 +583,6 @@ export default function SettingsHubPage() {
           { key: "persona", label: "Intelligence & Persona", icon: Cpu },
           { key: "voice", label: "Neural Voice (Supertonic-3)", icon: Mic },
           { key: "operating_mode", label: "Safety & Operating Modes", icon: ShieldAlert },
-          { key: "devices", label: "Linked Devices", icon: Smartphone },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -1482,49 +1474,6 @@ export default function SettingsHubPage() {
                 )}
               </button>
             ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ================= TAB 5: LINKED DEVICES ================= */}
-      {activeTab === "devices" && (
-        <Card className="bg-[#121214] border-zinc-800 text-white">
-          <CardHeader>
-            <CardTitle className="text-base font-bold">
-              Connected Physical Devices
-            </CardTitle>
-            <CardDescription className="text-xs text-zinc-400">
-              Hardware companion instances registered under this account via Convex sync.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-950/80 border border-indigo-700/50 text-indigo-400 flex items-center justify-center">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-white">
-                      Android Device Companion
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.2 rounded-full font-mono">
-                      ● Online
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Shizuku API: <span className="text-emerald-400">Ready</span> | Accessibility: <span className="text-emerald-400">Active</span>
-                  </p>
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                className="border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-full cursor-pointer"
-              >
-                Ping Phone
-              </Button>
-            </div>
           </CardContent>
         </Card>
       )}
