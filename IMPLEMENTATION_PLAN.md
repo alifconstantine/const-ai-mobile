@@ -22,10 +22,10 @@ graph LR
 | **Fondasi 1** | Backend Schema, Agent Core, Policy Engine (`packages/backend`) | ✅ **SELESAI** |
 | **Fondasi 2** | Native Kotlin Modules & TS Bridges (Device, Shizuku, Accessibility, Termux) | ✅ **SELESAI** |
 | **Tahap 1** | **Mobile UI Core & Navigation Shell (Header, Drawer, Review Panel 3.1)** | ✅ **SELESAI** |
-| **Tahap 2** | Web Dashboard Basic (Login Dev / Alif, BYOK API Key Vault, QR Pairing 4.1-4.3) | 🚀 **BERIKUTNYA** |
-| **Tahap 3** | Mobile Chat Stream, Accordion, HITL Card & Input Dock (3.2 - 3.4) | ⏳ Menunggu Tahap 2 |
-| **Tahap 4** | Web Dashboard Advanced (Voice Studio, Cron Tasks, Token Analytics 4.4-4.6) | ⏳ Menunggu Tahap 3 |
-| **Tahap 5** | Mobile Polish (Supertonic-3 On-Device TTS, Sliding Terminal Drawer, E2E 3.5-3.6) | ⏳ Menunggu Tahap 4 |
+| **Tahap 2** | **Web Dashboard & Settings Hub (Login, OmniRoute/BYOK Vault, Telemetry)** | ✅ **SELESAI** |
+| **Tahap 3** | **Mobile Auth, User Profile Sync, Chat Stream, HITL & Settings Hub (3.0 - 3.4)** | ✅ **SELESAI** |
+| **Tahap 4** | Web Dashboard Advanced (Voice Studio, Cron Tasks, Token Analytics 4.4-4.6) | ⏳ Siap Dilanjutkan |
+| **Tahap 5** | Mobile Polish (Supertonic-3 On-Device TTS, Sliding Terminal Drawer, E2E 3.5-3.6) | ⏳ Siap Dilanjutkan |
 
 ---
 
