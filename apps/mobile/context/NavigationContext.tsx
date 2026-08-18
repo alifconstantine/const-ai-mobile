@@ -139,7 +139,7 @@ const NavigationContext = createContext<NavigationContextType | undefined>(
 
 const INITIAL_WORKSPACES: WorkspaceItem[] = [
   { id: "ws-1", name: "const-ai-mobile", path: "D:/code/platform/const-ai-mobile" },
-  { id: "ws-2", name: "Const Local (OmniRoute)", path: "http://localhost:20128/v1", isCurrent: true },
+  { id: "ws-2", name: "Const Local Workspace", path: "local://workspace", isCurrent: true },
   { id: "ws-3", name: "Gemini 2.0 Flash", path: "https://generativelanguage.googleapis.com" },
 ];
 
@@ -209,7 +209,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
 
   const [customApiKey, setCustomApiKey] = useState<string>("");
   const [customBaseUrl, setCustomBaseUrl] = useState<string>(
-    "http://localhost:20128/v1"
+    process.env.EXPO_PUBLIC_CUSTOM_LLM_BASE_URL || ""
   );
 
   const [openTabs, setOpenTabs] = useState<SideTabItem[]>(INITIAL_TABS);

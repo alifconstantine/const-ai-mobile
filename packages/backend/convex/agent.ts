@@ -84,7 +84,8 @@ export const sendMessage = action({
     const customBaseUrl =
       args.customBaseUrlOverride ||
       userConfig?.customBaseUrl ||
-      "http://localhost:20128/v1";
+      (typeof process !== "undefined" && process.env.CUSTOM_LLM_BASE_URL) ||
+      "";
 
     // Resolve API key by provider preference & environment variables
     const envKey =
@@ -95,7 +96,9 @@ export const sendMessage = action({
           ? process.env.GEMINI_API_KEY
           : provider === "anthropic"
           ? process.env.ANTHROPIC_API_KEY
-          : process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY)) ||
+          : process.env.CUSTOM_LLM_API_KEY ||
+            process.env.OPENAI_API_KEY ||
+            process.env.OPENROUTER_API_KEY)) ||
       "";
 
     const apiKey =

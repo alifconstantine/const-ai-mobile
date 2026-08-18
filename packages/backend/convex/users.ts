@@ -163,7 +163,10 @@ export const getOrCreateDefaultUser = mutation({
         activeModel: "Const",
         operatingMode: "ask_before_change",
         provider: "custom_openai",
-        customBaseUrl: "http://localhost:20128/v1",
+        customBaseUrl:
+          (typeof process !== "undefined" &&
+            process.env.CUSTOM_LLM_BASE_URL) ||
+          "",
         customApiKeys: {
           openAi: "",
           openRouter: "",
@@ -181,9 +184,12 @@ export const getOrCreateDefaultUser = mutation({
         },
       });
       config = await ctx.db.get(configId);
-    } else if (config.customBaseUrl === "http://localhost:20128/v1/response") {
+    } else if (config.customBaseUrl?.includes("/response")) {
+      const defaultUrl =
+        (typeof process !== "undefined" && process.env.CUSTOM_LLM_BASE_URL) ||
+        "";
       await ctx.db.patch(config._id, {
-        customBaseUrl: "http://localhost:20128/v1",
+        customBaseUrl: defaultUrl,
       });
       config = await ctx.db.get(config._id);
     }
@@ -320,7 +326,10 @@ export const syncClerkUser = mutation({
         activeModel: "Const",
         operatingMode: "ask_before_change",
         provider: "custom_openai",
-        customBaseUrl: "http://localhost:20128/v1",
+        customBaseUrl:
+          (typeof process !== "undefined" &&
+            process.env.CUSTOM_LLM_BASE_URL) ||
+          "",
         customApiKeys: {
           openAi: "",
           openRouter: "",
