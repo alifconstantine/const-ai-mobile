@@ -3,28 +3,68 @@ import { mutation, query } from "./_generated/server";
 import { auth } from "./auth";
 
 /**
- * Returns the currently authenticated user based on Convex Auth session, or null if unauthenticated.
+ * Returns the currently authenticated user based on Clerk JWT identity or Convex Auth session.
  */
 export const viewer = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      return null;
-    }
-    const user = await ctx.db.get(userId);
-    if (!user) {
-      return null;
-    }
-    const config = await ctx.db
-      .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+    // 1. Check Clerk JWT Identity
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const email = identity.email || "";
+      const user = email
+        ? await ctx.db
+            .query("users")
+            .withIndex("email", (q) => q.eq("email", email))
+            .first()
+        : null;
 
-    return {
-      ...user,
-      config,
-    };
+      if (user) {
+        const config = await ctx.db
+          .query("userConfigs")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .first();
+
+        return {
+          ...user,
+          config,
+        };
+      }
+
+      // Return virtual identity preview before initial sync
+      return {
+        _id: undefined,
+        name: identity.name || (email ? email.split("@")[0] : "Operator"),
+        email: email || undefined,
+        username: (identity.nickname as string) || (email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") : "operator"),
+        avatarUrl: identity.pictureUrl,
+        image: identity.pictureUrl,
+        config: null,
+      };
+    }
+
+    // 2. Check Convex Auth Session
+    try {
+      const userId = await auth.getUserId(ctx);
+      if (userId) {
+        const user = await ctx.db.get(userId);
+        if (user) {
+          const config = await ctx.db
+            .query("userConfigs")
+            .withIndex("by_user", (q) => q.eq("userId", userId))
+            .first();
+
+          return {
+            ...user,
+            config,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
   },
 });
 
@@ -40,8 +80,28 @@ export const updateProfile = mutation({
     onboardingCompleted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
+    let targetUserId = null;
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity && identity.email) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .first();
+      if (user) {
+        targetUserId = user._id;
+      }
+    }
+
+    if (!targetUserId) {
+      try {
+        targetUserId = await auth.getUserId(ctx);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!targetUserId) {
       throw new Error("Unauthorized: Please sign in to update your profile");
     }
 
@@ -53,8 +113,8 @@ export const updateProfile = mutation({
     if (args.onboardingCompleted !== undefined)
       patchPayload.onboardingCompleted = args.onboardingCompleted;
 
-    await ctx.db.patch(userId, patchPayload);
-    return await ctx.db.get(userId);
+    await ctx.db.patch(targetUserId, patchPayload);
+    return await ctx.db.get(targetUserId);
   },
 });
 
@@ -69,7 +129,7 @@ export const getOrCreateDefaultUser = mutation({
 
     let user = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", email))
+      .withIndex("email", (q) => q.eq("email", email))
       .first();
 
     const now = Date.now();
@@ -105,8 +165,8 @@ export const getOrCreateDefaultUser = mutation({
         provider: "custom_openai",
         customBaseUrl: "http://localhost:20128/v1",
         customApiKeys: {
-          openAi: "sk-7852144cf1690e4d-297ffa-3396d47a",
-          openRouter: "sk-7852144cf1690e4d-297ffa-3396d47a",
+          openAi: "",
+          openRouter: "",
         },
         sessionSpendCapUsd: 50.0,
         systemPersona: "Senior Autonomous AI Mobile System Operator",
@@ -192,3 +252,98 @@ export const updateUserConfig = mutation({
     return await ctx.db.get(config._id);
   },
 });
+
+/**
+ * Synchronizes a Clerk authenticated user with Convex database.
+ */
+export const syncClerkUser = mutation({
+  args: {
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
+    username: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const email = args.email || identity?.email;
+    if (!email) {
+      throw new Error("Cannot sync user without email");
+    }
+
+    let user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .first();
+
+    const name = args.name || identity?.name || email.split("@")[0];
+    const username =
+      args.username ||
+      (identity?.nickname as string) ||
+      email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const avatarUrl = args.avatarUrl || identity?.pictureUrl;
+
+    const now = Date.now();
+
+    if (!user) {
+      const userId = await ctx.db.insert("users", {
+        email,
+        name,
+        username,
+        avatarUrl,
+        subscriptionStatus: "active",
+        subscriptionPlan: "yearly",
+        subscriptionExpiresAt: now + 365 * 24 * 60 * 60 * 1000,
+        creditsBalanceUsd: 50.0,
+        createdAt: now,
+      });
+      user = await ctx.db.get(userId);
+    } else {
+      await ctx.db.patch(user._id, {
+        name,
+        username: user.username || username,
+        avatarUrl: avatarUrl || user.avatarUrl,
+      });
+      user = await ctx.db.get(user._id);
+    }
+
+    if (!user) return null;
+
+    let config = await ctx.db
+      .query("userConfigs")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!config) {
+      const configId = await ctx.db.insert("userConfigs", {
+        userId: user._id,
+        inferenceMode: "byok",
+        activeModel: "Const",
+        operatingMode: "ask_before_change",
+        provider: "custom_openai",
+        customBaseUrl: "http://localhost:20128/v1",
+        customApiKeys: {
+          openAi: "",
+          openRouter: "",
+        },
+        sessionSpendCapUsd: 50.0,
+        systemPersona: "Senior Autonomous AI Mobile System Operator",
+        timezone: "Asia/Jakarta",
+        temperature: 0.7,
+        voiceSettings: {
+          ttsEngine: "local_supertonic",
+          selectedVoiceStyle: "M1",
+          speakingRate: 1.0,
+          enableEmotionTags: true,
+          autoPlayVoiceResponse: false,
+        },
+      });
+      config = await ctx.db.get(configId);
+    }
+
+    return {
+      user,
+      config,
+    };
+  },
+});
+

@@ -29,10 +29,12 @@ local.properties
 # Convex
 .convex/
 
-# Environment Variables
+# Environment Variables & Secrets
 .env
 .env.local
 .env.*.local
+.clerk/
+**/.clerk/
 
 # Turborepo & Build Cache
 .turbo/

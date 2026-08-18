@@ -86,14 +86,13 @@ export const sendMessage = action({
       userConfig?.customBaseUrl ||
       "http://localhost:20128/v1";
 
-    // Resolve API key
     const apiKey =
       args.customApiKeyOverride ||
       userConfig?.customApiKeys?.openAi ||
       userConfig?.customApiKeys?.openRouter ||
       (typeof process !== "undefined" &&
         (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY)) ||
-      "sk-7852144cf1690e4d-297ffa-3396d47a";
+      "";
 
     // 3. Build System Prompt & Canonical Messages Array
     const systemPrompt = buildSystemPrompt({

@@ -207,9 +207,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [activeReviewTab, setActiveReviewTab] = useState<ReviewTabType>("Review");
   const [filterMode, setFilterMode] = useState<"group" | "project">("project");
 
-  const [customApiKey, setCustomApiKey] = useState<string>(
-    "sk-7852144cf1690e4d-297ffa-3396d47a"
-  );
+  const [customApiKey, setCustomApiKey] = useState<string>("");
   const [customBaseUrl, setCustomBaseUrl] = useState<string>(
     "http://localhost:20128/v1"
   );

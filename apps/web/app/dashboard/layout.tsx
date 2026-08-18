@@ -4,18 +4,17 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ConstLogoIcon } from "@/components/ConstLogo";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useUser, useClerk } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
+import { api } from "@const-ai/backend";
 import {
   LayoutDashboard,
   Settings,
   Smartphone,
-  MessageSquare,
   LogOut,
   ShieldCheck,
-  Cpu,
   Loader2,
-  Bell,
-  Sparkles,
+  Lock,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -26,10 +25,29 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  let authActions: { signIn?: any; signOut?: any } = {};
+  let clerkUser: any = null;
+  let clerkIsLoaded = true;
+  let clerkIsSignedIn = false;
+  let clerkSignOut: any = null;
+
   try {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    authActions = useAuthActions();
+    const userRes = useUser();
+    clerkUser = userRes.user;
+    clerkIsLoaded = userRes.isLoaded;
+    clerkIsSignedIn = userRes.isSignedIn || false;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const clerk = useClerk();
+    clerkSignOut = clerk.signOut;
+  } catch {
+    // In case Clerk Provider is booting or in test
+  }
+
+  // Live Convex Authenticated User Viewer Query
+  let liveViewer: any = undefined;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    liveViewer = useQuery(api.users.viewer);
   } catch {
     // ignore
   }
@@ -42,9 +60,37 @@ export default function DashboardLayout({
     email?: string;
   } | null>(null);
 
-  // Unauthenticated Route Guard Check
+  // Sync session & Authenticated Route Guard Check
   useEffect(() => {
     if (typeof window !== "undefined") {
+      // 1. If Clerk is signed in
+      if (clerkIsSignedIn && clerkUser) {
+        setIsAuthenticated(true);
+        setUserProfile({
+          name: clerkUser.fullName || clerkUser.firstName || "Alif Constantine",
+          username:
+            clerkUser.username ||
+            clerkUser.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+            "alif",
+          avatarUrl: clerkUser.imageUrl || undefined,
+          email: clerkUser.primaryEmailAddress?.emailAddress || "alif@constai.platform",
+        });
+        return;
+      }
+
+      // 2. If liveViewer returns from Convex backend
+      if (liveViewer) {
+        setIsAuthenticated(true);
+        setUserProfile({
+          name: liveViewer.name || "Alif Constantine",
+          username: liveViewer.username || "alif",
+          avatarUrl: liveViewer.avatarUrl || liveViewer.image || undefined,
+          email: liveViewer.email || "alif@constai.platform",
+        });
+        return;
+      }
+
+      // 3. Fallback to local session storage (e.g. Instant Demo Access)
       const sessionStr = localStorage.getItem("const_user_session");
       if (sessionStr) {
         try {
@@ -54,16 +100,19 @@ export default function DashboardLayout({
             setUserProfile({
               name: session.name || "Alif Constantine",
               username: session.username || "alif",
-              avatarUrl:
-                session.avatarUrl ||
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop",
-              email: session.email || "alif@example.com",
+              avatarUrl: session.avatarUrl || undefined,
+              email: session.email || "alif@constai.platform",
             });
             return;
           }
         } catch {
           // parse failed
         }
+      }
+
+      // Wait if Clerk is still initializing
+      if (!clerkIsLoaded) {
+        return;
       }
 
       // Not authenticated -> Redirect to /sign-in
@@ -73,14 +122,14 @@ export default function DashboardLayout({
       }, 400);
       return () => clearTimeout(timer);
     }
-  }, [pathname, router]);
+  }, [pathname, router, liveViewer, clerkIsSignedIn, clerkUser, clerkIsLoaded]);
 
   const handleLogout = async () => {
-    if (authActions.signOut) {
+    if (clerkSignOut) {
       try {
-        await authActions.signOut();
+        await clerkSignOut();
       } catch (err) {
-        console.warn("SignOut notice:", err);
+        console.warn("Clerk SignOut notice:", err);
       }
     }
     if (typeof window !== "undefined") {
@@ -89,11 +138,11 @@ export default function DashboardLayout({
     router.push("/sign-in");
   };
 
-  // 1. Loading State while checking Auth
+  // Loading State while verifying Auth
   if (isAuthenticated === null || isAuthenticated === false) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center p-2.5 animate-pulse">
+        <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center p-3 animate-pulse shadow-2xl">
           <ConstLogoIcon size="md" color="#ffffff" className="w-full h-full" />
         </div>
         <div className="flex items-center gap-2 text-zinc-400 text-xs font-mono">
@@ -127,7 +176,7 @@ export default function DashboardLayout({
           {/* Logo Header */}
           <div className="flex items-center justify-between pb-6 mb-4 border-b border-zinc-800/80 px-2 pt-1">
             <Link href="/dashboard" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center p-1.5 shadow-sm">
+              <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-sm transition-transform hover:scale-105">
                 <ConstLogoIcon size="sm" color="#000000" className="w-full h-full" />
               </div>
               <div>
@@ -164,7 +213,7 @@ export default function DashboardLayout({
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-medium text-zinc-300 flex items-center gap-1.5">
                 <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
-                Mobile Phone
+                Mobile Device
               </span>
               <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -194,7 +243,7 @@ export default function DashboardLayout({
                 className="w-8 h-8 rounded-full object-cover border border-zinc-700 shrink-0"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-linear-to-tr from-zinc-900 via-zinc-800 to-zinc-700 border border-zinc-600 flex items-center justify-center text-white text-xs font-bold font-mono shrink-0 select-none">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-900 via-zinc-800 to-zinc-700 border border-zinc-600 flex items-center justify-center text-white text-xs font-bold font-mono shrink-0 select-none">
                 {userProfile?.name
                   ? userProfile.name
                       .split(" ")
@@ -207,10 +256,10 @@ export default function DashboardLayout({
             )}
             <div className="truncate">
               <p className="text-xs font-semibold text-white truncate">
-                {userProfile?.name}
+                {userProfile?.name || "Operator"}
               </p>
               <p className="text-[10px] text-zinc-500 font-mono truncate">
-                @{userProfile?.username}
+                @{userProfile?.username || "operator"}
               </p>
             </div>
           </div>
@@ -218,7 +267,7 @@ export default function DashboardLayout({
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>

@@ -35,9 +35,7 @@ export default defineSchema({
     subscriptionExpiresAt: v.optional(v.number()),
     creditsBalanceUsd: v.optional(v.number()),
     createdAt: v.optional(v.number()),
-  })
-    .index("email", ["email"])
-    .index("by_email", ["email"]),
+  }).index("email", ["email"]),
 
   // 2. User Configuration & Operating Mode + Voice Settings
   userConfigs: defineTable({
