@@ -128,7 +128,17 @@ export async function executeLLMCompletion(
       if (!customBaseUrl) {
         throw new Error("Custom Base URL is required for custom_openai provider.");
       }
-      endpoint = `${customBaseUrl.replace(/\/+$/, "")}/chat/completions`;
+      let trimmedBase = customBaseUrl.replace(/\/+$/, "");
+      if (trimmedBase.endsWith("/response")) {
+        trimmedBase = trimmedBase.slice(0, -"/response".length).replace(/\/+$/, "");
+      }
+      if (trimmedBase.endsWith("/chat/completions")) {
+        endpoint = trimmedBase;
+      } else if (trimmedBase.endsWith("/v1")) {
+        endpoint = `${trimmedBase}/chat/completions`;
+      } else {
+        endpoint = `${trimmedBase}/v1/chat/completions`;
+      }
       headers["Authorization"] = `Bearer ${apiKey}`;
       break;
   }
@@ -139,6 +149,7 @@ export async function executeLLMCompletion(
     messages,
     temperature,
     max_tokens: maxTokens,
+    stream: false,
   };
 
   if (tools.length > 0) {
@@ -153,47 +164,112 @@ export async function executeLLMCompletion(
     body: JSON.stringify(bodyPayload),
   });
 
+  const rawText = await response.text();
+
   if (!response.ok) {
-    const errorText = await response.text();
     let errorMessage = `Provider error (${response.status}): ${response.statusText}`;
     try {
-      const errJson = JSON.parse(errorText);
+      const errJson = JSON.parse(rawText);
       errorMessage = errJson.error?.message || errJson.message || errorMessage;
     } catch {
-      errorMessage = `${errorMessage} — ${errorText.slice(0, 300)}`;
+      errorMessage = `${errorMessage} — ${rawText.slice(0, 300)}`;
     }
     throw new Error(errorMessage);
   }
 
-  const result = await response.json();
-  const choice = result.choices?.[0];
-  const message = choice?.message;
-
-  // 4. Parse Tool Calls from Canonical response or Hermes XML fallback
+  // 4. Parse Response (handles both standard JSON and SSE data streams)
+  let textContent = "";
   const parsedToolCalls: LLMToolCall[] = [];
+  let modelUsed = model;
+  let usage: LLMResponse["usage"] = undefined;
 
-  if (message?.tool_calls && Array.isArray(message.tool_calls)) {
-    for (const tc of message.tool_calls) {
-      let parsedArgs: Record<string, unknown> = {};
-      try {
-        parsedArgs =
-          typeof tc.function.arguments === "string"
-            ? JSON.parse(tc.function.arguments)
-            : tc.function.arguments;
-      } catch {
-        parsedArgs = { raw: tc.function.arguments };
+  if (rawText.trim().startsWith("data:")) {
+    // SSE Stream fallback parser
+    const lines = rawText.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === "data: [DONE]") continue;
+      if (trimmed.startsWith("data:")) {
+        const jsonStr = trimmed.replace(/^data:\s*/, "");
+        try {
+          const chunk = JSON.parse(jsonStr);
+          if (chunk.model) modelUsed = chunk.model;
+          const choice = chunk.choices?.[0];
+          const delta = choice?.delta?.content || choice?.message?.content || "";
+          textContent += delta;
+
+          // Tool calls in stream
+          const deltaToolCalls = choice?.delta?.tool_calls || choice?.message?.tool_calls;
+          if (Array.isArray(deltaToolCalls)) {
+            for (const dtc of deltaToolCalls) {
+              if (dtc.function?.name) {
+                let parsedArgs: Record<string, unknown> = {};
+                try {
+                  parsedArgs =
+                    typeof dtc.function.arguments === "string"
+                      ? JSON.parse(dtc.function.arguments)
+                      : dtc.function.arguments;
+                } catch {
+                  parsedArgs = { raw: dtc.function.arguments };
+                }
+                parsedToolCalls.push({
+                  id: dtc.id || `stream_call_${Date.now()}`,
+                  name: dtc.function.name,
+                  arguments: parsedArgs,
+                });
+              }
+            }
+          }
+        } catch {
+          // ignore malformed SSE chunks
+        }
+      }
+    }
+  } else {
+    // Standard JSON response
+    try {
+      const result = JSON.parse(rawText);
+      const choice = result.choices?.[0];
+      const message = choice?.message;
+
+      textContent = message?.content || "";
+      modelUsed = result.model || model;
+
+      if (result.usage) {
+        usage = {
+          promptTokens: result.usage.prompt_tokens || 0,
+          completionTokens: result.usage.completion_tokens || 0,
+          totalTokens: result.usage.total_tokens || 0,
+        };
       }
 
-      parsedToolCalls.push({
-        id: tc.id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        name: tc.function.name,
-        arguments: parsedArgs,
-      });
+      if (message?.tool_calls && Array.isArray(message.tool_calls)) {
+        for (const tc of message.tool_calls) {
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs =
+              typeof tc.function.arguments === "string"
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments;
+          } catch {
+            parsedArgs = { raw: tc.function.arguments };
+          }
+
+          parsedToolCalls.push({
+            id:
+              tc.id ||
+              `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            name: tc.function.name,
+            arguments: parsedArgs,
+          });
+        }
+      }
+    } catch {
+      textContent = rawText;
     }
   }
 
   // Hermes fallback: Check for <tool_call> tags in content text if native tool_calls was empty
-  let textContent = message?.content || "";
   if (parsedToolCalls.length === 0 && textContent.includes("<tool_call>")) {
     const regex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
     let match;
@@ -211,21 +287,16 @@ export async function executeLLMCompletion(
         // Ignore unparseable tags
       }
     }
-    // Clean tool tags from user-facing text
-    textContent = textContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+    textContent = textContent
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
+      .trim();
   }
 
   return {
     content: textContent,
     toolCalls: parsedToolCalls.length > 0 ? parsedToolCalls : undefined,
-    usage: result.usage
-      ? {
-          promptTokens: result.usage.prompt_tokens || 0,
-          completionTokens: result.usage.completion_tokens || 0,
-          totalTokens: result.usage.total_tokens || 0,
-        }
-      : undefined,
-    modelUsed: result.model || model,
+    usage,
+    modelUsed,
   };
 }
 

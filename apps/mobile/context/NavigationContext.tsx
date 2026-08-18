@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 import { OperatingMode } from "@const-ai/types";
+import { useMutation } from "convex/react";
+import { api } from "@const-ai/backend";
 
 export type ReviewTabType =
   | "Review"
@@ -43,6 +51,9 @@ export interface WorkspaceItem {
 }
 
 interface NavigationContextType {
+  // User & DB
+  currentUserId: string | null;
+
   // Drawer & Panel States
   isTaskDrawerOpen: boolean;
   isReviewPanelOpen: boolean;
@@ -68,6 +79,8 @@ interface NavigationContextType {
   activeOperatingMode: OperatingMode;
   activeReviewTab: ReviewTabType;
   filterMode: "group" | "project";
+  customApiKey: string;
+  customBaseUrl: string;
 
   // Multi-tab Side Panel
   openTabs: SideTabItem[];
@@ -113,87 +126,21 @@ interface NavigationContextType {
   setActiveOperatingMode: (mode: OperatingMode) => void;
   setActiveReviewTab: (tab: ReviewTabType) => void;
   setFilterMode: (mode: "group" | "project") => void;
+  setCustomApiKey: (key: string) => void;
+  setCustomBaseUrl: (url: string) => void;
 
   selectTask: (task: TaskItem) => void;
+  createNewConversation: (title?: string) => Promise<string | null>;
 }
 
-const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
-
-const INITIAL_PROJECTS: ProjectFolder[] = [
-  {
-    id: "proj-1",
-    name: "const-ai-mobile",
-    tasks: [],
-  },
-  {
-    id: "proj-2",
-    name: "Gemini 3.6 Flash",
-    tasks: [
-      {
-        id: "task-101",
-        title: "Clone Project Gargantua dengan UI Baru",
-        projectId: "proj-2",
-        projectName: "Gemini 3.6 Flash",
-        timeAgo: "now",
-        isActive: true,
-        hasAwaitingApproval: true,
-      },
-      {
-        id: "task-102",
-        title: "Kloning Gargantua dengan preset interstellar",
-        projectId: "proj-2",
-        projectName: "Gemini 3.6 Flash",
-        timeAgo: "22h",
-      },
-      {
-        id: "task-103",
-        title: "Gargantua Schwarzschild Blackhole Shader",
-        projectId: "proj-2",
-        projectName: "Gemini 3.6 Flash",
-        timeAgo: "22h",
-      },
-      {
-        id: "task-104",
-        title: "Pembuatan Game 3D Procedural Space",
-        projectId: "proj-2",
-        projectName: "Gemini 3.6 Flash",
-        timeAgo: "23h",
-      },
-      {
-        id: "task-105",
-        title: "Landing Page Portofolio Interaktif",
-        projectId: "proj-2",
-        projectName: "Gemini 3.6 Flash",
-        timeAgo: "23h",
-      },
-    ],
-  },
-  {
-    id: "proj-3",
-    name: "Java",
-    tasks: [
-      {
-        id: "task-201",
-        title: "Kurikulum Pembelajaran Java Spring Boot",
-        projectId: "proj-3",
-        projectName: "Java",
-        timeAgo: "3d",
-      },
-      {
-        id: "task-202",
-        title: "Selection side chat & API Gateway",
-        projectId: "proj-3",
-        projectName: "Java",
-        timeAgo: "3d",
-      },
-    ],
-  },
-];
+const NavigationContext = createContext<NavigationContextType | undefined>(
+  undefined
+);
 
 const INITIAL_WORKSPACES: WorkspaceItem[] = [
   { id: "ws-1", name: "const-ai-mobile", path: "D:/code/platform/const-ai-mobile" },
-  { id: "ws-2", name: "Gemini 3.6 Flash", path: "D:/code/projects/gemini-flash", isCurrent: true },
-  { id: "ws-3", name: "Java", path: "D:/code/enterprise/java-core" },
+  { id: "ws-2", name: "Const Local (OmniRoute)", path: "http://localhost:20128/v1", isCurrent: true },
+  { id: "ws-3", name: "Gemini 2.0 Flash", path: "https://generativelanguage.googleapis.com" },
 ];
 
 const INITIAL_TABS: SideTabItem[] = [
@@ -231,7 +178,11 @@ const INITIAL_TABS: SideTabItem[] = [
   },
 ];
 
-export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
   const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
@@ -247,21 +198,57 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isSlashCommandOpen, setIsSlashCommandOpen] = useState(false);
   const [promptInput, setPromptInput] = useState("");
 
-  const [activeWorkspace, setActiveWorkspace] = useState<string>("Gemini 3.6 Flash");
-  const [activeConversationId, setActiveConversationId] = useState<string>("task-101");
-  const [activeTaskTitle, setActiveTaskTitle] = useState<string>(
-    "Clone Project Gargantua dengan UI Baru"
-  );
-  const [activeModel, setActiveModel] = useState<string>("Gemini 3.7 Flash High");
-  const [activeOperatingMode, setActiveOperatingMode] = useState<OperatingMode>("full_access_yolo");
-  const [activeReviewTab, setActiveReviewTab] = useState<ReviewTabType>("File");
+  const [activeWorkspace, setActiveWorkspace] = useState<string>("const-ai-mobile");
+  const [activeConversationId, setActiveConversationId] = useState<string>("");
+  const [activeTaskTitle, setActiveTaskTitle] = useState<string>("New Task");
+  const [activeModel, setActiveModel] = useState<string>("Const");
+  const [activeOperatingMode, setActiveOperatingMode] =
+    useState<OperatingMode>("ask_before_change");
+  const [activeReviewTab, setActiveReviewTab] = useState<ReviewTabType>("Review");
   const [filterMode, setFilterMode] = useState<"group" | "project">("project");
 
-  const [openTabs, setOpenTabs] = useState<SideTabItem[]>(INITIAL_TABS);
-  const [activeTabId, setActiveTabId] = useState<string>("tab-file-server");
+  const [customApiKey, setCustomApiKey] = useState<string>(
+    "sk-7852144cf1690e4d-297ffa-3396d47a"
+  );
+  const [customBaseUrl, setCustomBaseUrl] = useState<string>(
+    "http://localhost:20128/v1"
+  );
 
-  const [projects] = useState<ProjectFolder[]>(INITIAL_PROJECTS);
+  const [openTabs, setOpenTabs] = useState<SideTabItem[]>(INITIAL_TABS);
+  const [activeTabId, setActiveTabId] = useState<string>("tab-review");
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(INITIAL_WORKSPACES);
+
+  const getOrCreateUser = useMutation(api.users.getOrCreateDefaultUser);
+  const createConv = useMutation(api.conversations.createConversation);
+
+  // Initialize Default User on mount
+  useEffect(() => {
+    let isMounted = true;
+    getOrCreateUser({})
+      .then((res) => {
+        if (isMounted && res?.user?._id) {
+          setCurrentUserId(res.user._id);
+          if (res.config?.activeModel) {
+            setActiveModel(res.config.activeModel);
+          }
+          if (res.config?.operatingMode) {
+            setActiveOperatingMode(res.config.operatingMode);
+          }
+          if (res.config?.customBaseUrl) {
+            setCustomBaseUrl(res.config.customBaseUrl);
+          }
+          if (res.config?.customApiKeys?.openAi) {
+            setCustomApiKey(res.config.customApiKeys.openAi);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Convex connection warning (local mode fallback):", err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const toggleTaskDrawer = () => setIsTaskDrawerOpen((prev) => !prev);
   const openTaskDrawer = () => setIsTaskDrawerOpen(true);
@@ -277,8 +264,36 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   const selectTask = (task: TaskItem) => {
     setActiveConversationId(task.id);
     setActiveTaskTitle(task.title);
-    setActiveWorkspace(task.projectName);
+    if (task.projectName) {
+      setActiveWorkspace(task.projectName);
+    }
     setIsTaskDrawerOpen(false);
+  };
+
+  const createNewConversation = async (
+    title: string = "New Task"
+  ): Promise<string | null> => {
+    if (!currentUserId) {
+      const fallbackId = `local_conv_${Date.now()}`;
+      setActiveConversationId(fallbackId);
+      setActiveTaskTitle(title);
+      return fallbackId;
+    }
+    try {
+      const convId = await createConv({
+        userId: currentUserId as any,
+        title,
+      });
+      setActiveConversationId(convId);
+      setActiveTaskTitle(title);
+      return convId;
+    } catch (err) {
+      console.warn("Failed to create conversation in DB:", err);
+      const fallbackId = `local_conv_${Date.now()}`;
+      setActiveConversationId(fallbackId);
+      setActiveTaskTitle(title);
+      return fallbackId;
+    }
   };
 
   const handleSetWorkspace = (workspaceName: string) => {
@@ -293,7 +308,10 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const openSideTab = (tab: SideTabItem) => {
     setOpenTabs((prev) => {
-      const existing = prev.find((t) => t.id === tab.id || (t.type === tab.type && t.title === tab.title));
+      const existing = prev.find(
+        (t) =>
+          t.id === tab.id || (t.type === tab.type && t.title === tab.title)
+      );
       if (existing) {
         return prev;
       }
@@ -327,6 +345,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   return (
     <NavigationContext.Provider
       value={{
+        currentUserId,
         isTaskDrawerOpen,
         isReviewPanelOpen,
         isTerminalOpen,
@@ -349,11 +368,13 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
         activeOperatingMode,
         activeReviewTab,
         filterMode,
+        customApiKey,
+        customBaseUrl,
 
         openTabs,
         activeTabId,
 
-        projects,
+        projects: [],
         workspaces,
 
         toggleTaskDrawer,
@@ -397,8 +418,11 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
         setActiveOperatingMode,
         setActiveReviewTab,
         setFilterMode,
+        setCustomApiKey,
+        setCustomBaseUrl,
 
         selectTask,
+        createNewConversation,
       }}
     >
       {children}

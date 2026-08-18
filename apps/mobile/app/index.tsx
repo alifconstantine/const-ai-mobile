@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,27 +6,25 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Plus,
   ArrowUp,
-  Shield,
-  FileCode,
-  Globe,
   ChevronDown,
-  ChevronRight,
-  Undo2,
-  ExternalLink,
-  Terminal as TerminalIcon,
-  CircleDot,
   Disc,
   Hand,
   ShieldCheck,
   ClipboardList,
   ShieldAlert,
+  Bot,
+  Sparkles,
 } from "lucide-react-native";
+import { useQuery, useAction } from "convex/react";
+import { api } from "@const-ai/backend";
+
 import { HeaderBar } from "../components/navigation/HeaderBar";
 import { TaskDrawer } from "../components/navigation/TaskDrawer";
 import { WorkspaceModal } from "../components/navigation/WorkspaceModal";
@@ -40,28 +38,52 @@ import { ContextWindowModal } from "../components/modals/ContextWindowModal";
 import { PlusActionMenu } from "../components/dock/PlusActionMenu";
 import { MentionContextModal } from "../components/dock/MentionContextModal";
 import { SlashCommandModal } from "../components/dock/SlashCommandModal";
-import { ExecutionProgressCard } from "../components/chat/ExecutionProgressCard";
+import { ChatMessageItem } from "../components/chat/ChatMessageItem";
+import { ThinkingIndicator } from "../components/chat/ThinkingIndicator";
 import { useNavigation } from "../context/NavigationContext";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [isSending, setIsSending] = useState(false);
 
   const {
-    openReviewPanel,
-    setActiveReviewTab,
+    currentUserId,
+    activeConversationId,
     activeModel,
     activeOperatingMode,
     setOperatingModeModalOpen,
     setModelSelectorModalOpen,
     setContextMeterOpen,
-    isPlusMenuOpen,
     setPlusMenuOpen,
     setMentionOpen,
     setSlashCommandOpen,
     promptInput,
     setPromptInput,
-    openSideTab,
+    createNewConversation,
+    customApiKey,
+    customBaseUrl,
   } = useNavigation();
+
+  // Query live messages from Convex
+  const messages = useQuery(
+    api.messages.listMessages,
+    activeConversationId && !activeConversationId.startsWith("local_")
+      ? { conversationId: activeConversationId as any }
+      : "skip"
+  );
+
+  // Send action dispatcher
+  const sendMessageAction = useAction(api.agent.sendMessage);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages?.length]);
 
   const handlePromptChange = (text: string) => {
     setPromptInput(text);
@@ -69,6 +91,44 @@ export default function HomeScreen() {
       setMentionOpen(true);
     } else if (text.endsWith("/")) {
       setSlashCommandOpen(true);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const text = promptInput.trim();
+    if (!text || isSending) return;
+
+    setPromptInput("");
+    setIsSending(true);
+
+    try {
+      let convId = activeConversationId;
+      if (!convId || convId.startsWith("local_")) {
+        const newTitle = text.slice(0, 30) + (text.length > 30 ? "..." : "");
+        const createdId = await createNewConversation(newTitle);
+        if (createdId) {
+          convId = createdId;
+        }
+      }
+
+      if (!currentUserId || !convId) {
+        setIsSending(false);
+        return;
+      }
+
+      await sendMessageAction({
+        userId: currentUserId as any,
+        conversationId: convId as any,
+        userMessage: text,
+        modelOverride: activeModel,
+        operatingModeOverride: activeOperatingMode,
+        customApiKeyOverride: customApiKey,
+        customBaseUrlOverride: customBaseUrl,
+      });
+    } catch (err) {
+      console.error("Error sending message:", err);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -101,115 +161,100 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       {/* Top Navigation Bar */}
       <HeaderBar />
 
-      {/* Main Workspace Body */}
+      {/* Main Chat Scroll View */}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.mainScroll}
         contentContainerStyle={styles.mainContent}
-        bounces={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* User Prompt Message */}
-        <View style={styles.userMessageContainer}>
-          <View style={styles.userBubble}>
-            <Text style={styles.userText}>apakah sudah?? dan di run??</Text>
-          </View>
-        </View>
-
-        {/* Rich AI Execution Progress Stream (Image 4 & 5) */}
-        <ExecutionProgressCard />
-
-        {/* AI Markdown Explanation */}
-        <View style={styles.aiMessageBlock}>
-          <Text style={styles.aiParagraph}>
-            Saya telah memeriksa server HTTP lokal dan memastikannya berjalan secara
-            persisten di port 8000.
-          </Text>
-          <Text style={styles.aiParagraph}>
-            File <Text style={styles.inlineCode}>server.js</Text> telah dibuat dan di-run
-            di latar belakang. Anda dapat meninjau diff kode atau membuka preview web secara langsung.
-          </Text>
-        </View>
-
-        {/* Action Card: Web Server Preview */}
-        <View style={styles.actionCard}>
-          <View style={styles.actionCardLeft}>
-            <View style={styles.actionIconContainer}>
-              <Globe size={18} color="#38bdf8" />
+        {/* Welcome Banner when conversation is empty */}
+        {(!messages || messages.length === 0) && !isSending && (
+          <View style={styles.welcomeContainer}>
+            <View style={styles.welcomeIconCircle}>
+              <Bot size={28} color="#38bdf8" />
             </View>
-            <View>
-              <Text style={styles.actionCardTitle}>localhost:8000</Text>
-              <Text style={styles.actionCardSubtitle}>Website preview running</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.btnActionOpen}
-            onPress={() => {
-              openSideTab({
-                id: "tab-browser",
-                type: "Browser",
-                title: "localhost:8000",
-                url: "http://localhost:8000/",
-                isClosable: true,
-              });
-            }}
-          >
-            <Text style={styles.btnActionOpenText}>Open</Text>
-            <ChevronRight size={13} color="#d4d4d8" />
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.welcomeTitle}>Const AI Mobile</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Autonomous On-Device Agent & Productivity Engine
+            </Text>
 
-        {/* Action Card: File Changes Diff */}
-        <View style={styles.actionCard}>
-          <View style={styles.actionCardLeft}>
-            <View style={styles.actionIconContainer}>
-              <FileCode size={18} color="#eab308" />
-            </View>
-            <View>
-              <View style={styles.fileCardHeader}>
-                <Text style={styles.actionCardTitle}>server.js</Text>
-                <Text style={styles.diffPill}>+42 -0</Text>
-              </View>
-              <Text style={styles.actionCardSubtitle}>1 file modified</Text>
+            <View style={styles.sampleSuggestions}>
+              <TouchableOpacity
+                style={styles.suggestionChip}
+                onPress={() =>
+                  setPromptInput("Periksa status memori internal dan bersihkan file sampah")
+                }
+              >
+                <Sparkles size={12} color="#a1a1aa" />
+                <Text style={styles.suggestionText}>
+                  "Bersihkan file sampah & cache storage"
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.suggestionChip}
+                onPress={() =>
+                  setPromptInput("Buat script server HTTP node.js di port 8000")
+                }
+              >
+                <Sparkles size={12} color="#a1a1aa" />
+                <Text style={styles.suggestionText}>
+                  "Buat script server HTTP di port 8000"
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.suggestionChip}
+                onPress={() =>
+                  setPromptInput("Buka aplikasi YouTube via Accessibility spatial tap")
+                }
+              >
+                <Sparkles size={12} color="#a1a1aa" />
+                <Text style={styles.suggestionText}>
+                  "Buka aplikasi YouTube di HP"
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
+        )}
 
-          <View style={styles.fileCardButtons}>
-            <TouchableOpacity
-              style={styles.btnReviewCode}
-              onPress={() => {
-                openSideTab({
-                  id: "tab-file-server",
-                  type: "File",
-                  title: "server.js",
-                  filename: "server.js",
-                  isClosable: true,
-                });
-              }}
-            >
-              <Text style={styles.btnReviewCodeText}>Review</Text>
-            </TouchableOpacity>
+        {/* Live Messages List */}
+        {messages?.map((msg: any) => (
+          <ChatMessageItem
+            key={msg._id}
+            message={msg}
+            onCopyPrompt={(txt) => setPromptInput(txt)}
+          />
+        ))}
 
-            <TouchableOpacity style={styles.btnUndoMini}>
-              <Undo2 size={13} color="#a1a1aa" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Thinking Indicator while AI processes */}
+        {isSending && <ThinkingIndicator />}
       </ScrollView>
 
       {/* Floating Bottom Input Dock */}
-      <View style={[styles.inputDockContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View
+        style={[
+          styles.inputDockContainer,
+          { paddingBottom: Math.max(insets.bottom, 10) },
+        ]}
+      >
         <View style={styles.inputBoxContainer}>
           <TextInput
             style={styles.inputTextInput}
-            placeholder="Ask for follow-up changes..."
+            placeholder="Type instructions or ask anything..."
             placeholderTextColor="#71717a"
             multiline
             value={promptInput}
             onChangeText={handlePromptChange}
+            onSubmitEditing={handleSendMessage}
           />
 
           {/* Bottom Dock Action Bar */}
@@ -219,7 +264,7 @@ export default function HomeScreen() {
                 style={styles.dockIconButton}
                 onPress={() => setPlusMenuOpen(true)}
                 activeOpacity={0.7}
-                accessibilityLabel="Add attachment, context, or commands"
+                accessibilityLabel="Add attachment or skill commands"
               >
                 <Plus size={16} color="#a1a1aa" />
               </TouchableOpacity>
@@ -231,15 +276,13 @@ export default function HomeScreen() {
                 activeOpacity={0.7}
               >
                 {renderModeIcon()}
-                <Text style={styles.modePillText}>
-                  {getModeLabel()}
-                </Text>
+                <Text style={styles.modePillText}>{getModeLabel()}</Text>
                 <ChevronDown size={11} color="#a1a1aa" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.dockRightControls}>
-              {/* Context Meter Ring Button */}
+              {/* Context Meter Button */}
               <TouchableOpacity
                 style={styles.contextMeterBtn}
                 onPress={() => setContextMeterOpen(true)}
@@ -262,15 +305,26 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               {/* Send Button */}
-              <TouchableOpacity style={styles.sendButton}>
-                <ArrowUp size={16} color="#09090b" />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  Boolean(promptInput.trim()) && styles.sendButtonActive,
+                ]}
+                onPress={handleSendMessage}
+                disabled={isSending || !promptInput.trim()}
+                activeOpacity={0.8}
+              >
+                <ArrowUp
+                  size={16}
+                  color={promptInput.trim() ? "#09090b" : "#52525b"}
+                />
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </View>
 
-      {/* Overlays & Drawers */}
+      {/* Drawers & Modals Overlays */}
       <TaskDrawer />
       <ReviewSidePanel />
       <WorkspaceModal />
@@ -283,7 +337,7 @@ export default function HomeScreen() {
       <PlusActionMenu />
       <MentionContextModal />
       <SlashCommandModal />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -297,172 +351,57 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     padding: 14,
-    paddingBottom: 120,
+    paddingBottom: 130,
+    flexGrow: 1,
   },
-  userMessageContainer: {
-    alignItems: "flex-end",
-    marginBottom: 16,
-  },
-  userBubble: {
-    backgroundColor: "#1f1f23",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    maxWidth: "85%",
-    borderWidth: 1,
-    borderColor: "#2a2a30",
-  },
-  userText: {
-    color: "#f4f4f5",
-    fontSize: 13.5,
-    lineHeight: 19,
-  },
-  accordionCard: {
-    backgroundColor: "#111114",
-    borderColor: "#1e1e24",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-  },
-  accordionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  accordionTitle: {
-    color: "#a1a1aa",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  accordionSteps: {
-    marginTop: 8,
-    paddingLeft: 20,
-    gap: 6,
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  stepIcon: {
-    marginRight: 2,
-  },
-  stepText: {
-    color: "#71717a",
-    fontSize: 12,
-  },
-  stepCommand: {
-    color: "#e4e4e7",
-    fontSize: 12,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-  },
-  stepFile: {
-    color: "#fafafa",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  stepDiff: {
-    color: "#4ade80",
-    fontSize: 11,
-    fontWeight: "bold",
-  },
-  aiMessageBlock: {
-    marginBottom: 16,
-    gap: 10,
-  },
-  aiParagraph: {
-    color: "#d4d4d8",
-    fontSize: 13.5,
-    lineHeight: 20,
-  },
-  inlineCode: {
-    backgroundColor: "#1e1e24",
-    color: "#38bdf8",
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    fontSize: 12,
-  },
-  actionCard: {
-    backgroundColor: "#121215",
-    borderColor: "#222228",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  actionCardLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  actionIconContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 7,
-    backgroundColor: "#18181b",
+  welcomeContainer: {
     alignItems: "center",
     justifyContent: "center",
+    paddingTop: 40,
+    paddingHorizontal: 20,
   },
-  actionCardTitle: {
-    color: "#fafafa",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  actionCardSubtitle: {
-    color: "#71717a",
-    fontSize: 11,
-    marginTop: 1,
-  },
-  fileCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  diffPill: {
-    color: "#4ade80",
-    fontSize: 11,
-    fontWeight: "bold",
-  },
-  btnActionOpen: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e1e24",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    gap: 4,
-  },
-  btnActionOpenText: {
-    color: "#e4e4e7",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  fileCardButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  btnReviewCode: {
-    backgroundColor: "#1e1e24",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  btnReviewCodeText: {
-    color: "#e4e4e7",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  btnUndoMini: {
+  welcomeIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#18181b",
-    padding: 5,
-    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#27272a",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  welcomeTitle: {
+    color: "#fafafa",
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  welcomeSubtitle: {
+    color: "#71717a",
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  sampleSuggestions: {
+    marginTop: 24,
+    width: "100%",
+    gap: 8,
+  },
+  suggestionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#141418",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#222228",
+  },
+  suggestionText: {
+    color: "#a1a1aa",
+    fontSize: 12,
   },
   inputDockContainer: {
     position: "absolute",
@@ -470,39 +409,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 12,
-    paddingTop: 8,
-    backgroundColor: "rgba(9, 9, 11, 0.95)",
+    backgroundColor: "transparent",
   },
   inputBoxContainer: {
     backgroundColor: "#141418",
-    borderColor: "#27272a",
+    borderRadius: 14,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
+    borderColor: "#27272a",
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 8,
   },
   inputTextInput: {
     color: "#fafafa",
-    fontSize: 13,
-    minHeight: 36,
+    fontSize: 14,
+    lineHeight: 20,
     maxHeight: 90,
     padding: 0,
-    textAlignVertical: "top",
-    borderWidth: 0,
-    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+    marginBottom: 8,
   },
   dockActionBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#1e1e24",
   },
   dockLeftControls: {
     flexDirection: "row",
@@ -510,19 +444,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dockIconButton: {
-    padding: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1f1f24",
   },
   modePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e1e24",
+    backgroundColor: "#1f1f24",
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 6,
     gap: 4,
   },
   modePillText: {
-    color: "#e4e4e7",
+    color: "#d4d4d8",
     fontSize: 11,
     fontWeight: "500",
   },
@@ -532,32 +471,37 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   contextMeterBtn: {
-    padding: 4,
-    borderRadius: 4,
+    width: 26,
+    height: 26,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#1f1f24",
+    borderRadius: 6,
   },
   modelPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e1e24",
+    backgroundColor: "#1f1f24",
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 6,
     gap: 4,
-    maxWidth: 160,
+    maxWidth: 100,
   },
   modelPillText: {
-    color: "#e4e4e7",
+    color: "#d4d4d8",
     fontSize: 11,
     fontWeight: "500",
   },
   sendButton: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: "#fafafa",
+    borderRadius: 7,
+    backgroundColor: "#27272a",
     alignItems: "center",
     justifyContent: "center",
+  },
+  sendButtonActive: {
+    backgroundColor: "#38bdf8",
   },
 });

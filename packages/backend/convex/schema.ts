@@ -1,26 +1,43 @@
 import { defineSchema, defineTable } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // 1. Users & Subscription
+  ...authTables,
+
+  // 1. Users & Subscription (Convex Auth custom user schema)
   users: defineTable({
-    email: v.string(),
-    name: v.string(),
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    username: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
-    subscriptionStatus: v.union(
-      v.literal("active"),
-      v.literal("expired"),
-      v.literal("pending_payment")
+    initials: v.optional(v.string()),
+    onboardingCompleted: v.optional(v.boolean()),
+    subscriptionStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("expired"),
+        v.literal("pending_payment")
+      )
     ),
-    subscriptionPlan: v.union(
-      v.literal("monthly"),
-      v.literal("quarterly"),
-      v.literal("yearly")
+    subscriptionPlan: v.optional(
+      v.union(
+        v.literal("monthly"),
+        v.literal("quarterly"),
+        v.literal("yearly")
+      )
     ),
-    subscriptionExpiresAt: v.number(),
-    creditsBalanceUsd: v.number(),
-    createdAt: v.number(),
-  }).index("by_email", ["email"]),
+    subscriptionExpiresAt: v.optional(v.number()),
+    creditsBalanceUsd: v.optional(v.number()),
+    createdAt: v.optional(v.number()),
+  })
+    .index("email", ["email"])
+    .index("by_email", ["email"]),
 
   // 2. User Configuration & Operating Mode + Voice Settings
   userConfigs: defineTable({
@@ -39,6 +56,8 @@ export default defineSchema({
       openAi: v.optional(v.string()),
       openRouter: v.optional(v.string()),
     }),
+    customBaseUrl: v.optional(v.string()),
+    provider: v.optional(v.string()),
     sessionSpendCapUsd: v.number(),
     systemPersona: v.string(),
     timezone: v.string(),

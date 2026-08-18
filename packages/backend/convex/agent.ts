@@ -46,6 +46,10 @@ export const sendMessage = action({
     conversationId: v.id("conversations"),
     userMessage: v.string(),
     targetDeviceId: v.optional(v.id("devices")),
+    modelOverride: v.optional(v.string()),
+    operatingModeOverride: v.optional(v.string()),
+    customApiKeyOverride: v.optional(v.string()),
+    customBaseUrlOverride: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<SendMessageResult> => {
     // 1. Save user's incoming message
@@ -56,20 +60,40 @@ export const sendMessage = action({
     });
 
     // 2. Fetch User Config & Message History
+    const userConfig = await ctx.runQuery(api.users.getUserConfig, {
+      userId: args.userId,
+    });
+
     const history = await ctx.runQuery(api.messages.listMessages, {
       conversationId: args.conversationId,
     });
 
     // Read user config or use sensible defaults
-    const operatingMode: OperatingMode = "ask_before_change";
-    const activeModel = "google/gemini-2.0-flash-001";
-    const provider: LLMProviderType = "openrouter";
+    const operatingMode: OperatingMode =
+      (args.operatingModeOverride as OperatingMode) ||
+      userConfig?.operatingMode ||
+      "ask_before_change";
 
-    // Resolve API key from environment variable or user config
+    const activeModel =
+      args.modelOverride || userConfig?.activeModel || "Const";
+
+    const provider: LLMProviderType =
+      (userConfig?.provider as LLMProviderType) ||
+      (activeModel === "Const" ? "custom_openai" : "openrouter");
+
+    const customBaseUrl =
+      args.customBaseUrlOverride ||
+      userConfig?.customBaseUrl ||
+      "http://localhost:20128/v1";
+
+    // Resolve API key
     const apiKey =
+      args.customApiKeyOverride ||
+      userConfig?.customApiKeys?.openAi ||
+      userConfig?.customApiKeys?.openRouter ||
       (typeof process !== "undefined" &&
         (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY)) ||
-      "demo_key";
+      "sk-7852144cf1690e4d-297ffa-3396d47a";
 
     // 3. Build System Prompt & Canonical Messages Array
     const systemPrompt = buildSystemPrompt({
@@ -107,6 +131,7 @@ export const sendMessage = action({
         provider,
         model: activeModel,
         apiKey,
+        customBaseUrl,
         tools: CONST_DEVICE_TOOLS,
       });
     } catch (err: unknown) {
@@ -115,7 +140,7 @@ export const sendMessage = action({
       await ctx.runMutation(api.messages.insertMessage, {
         conversationId: args.conversationId,
         role: "assistant",
-        content: `⚠️ Maaf, terjadi kendala saat memanggil model AI:\n${errorMsg}`,
+        content: `⚠️ Maaf, terjadi kendala saat memanggil model AI (${activeModel}):\n${errorMsg}`,
       });
       return { success: false, error: errorMsg };
     }

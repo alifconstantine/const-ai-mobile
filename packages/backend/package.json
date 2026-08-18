@@ -7,8 +7,16 @@
     "deploy": "convex deploy",
     "typecheck": "tsc --noEmit"
   },
+  "main": "./convex/_generated/api.js",
+  "types": "./convex/_generated/api.d.ts",
+  "exports": {
+    ".": "./convex/_generated/api.js",
+    "./api": "./convex/_generated/api.js"
+  },
   "dependencies": {
+    "@auth/core": "^0.41.3",
     "@const-ai/types": "workspace:*",
+    "@convex-dev/auth": "^0.0.95",
     "convex": "^1.19.0"
   },
   "devDependencies": {

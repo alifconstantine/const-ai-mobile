@@ -8,7 +8,6 @@ import {
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
-  Platform,
 } from "react-native";
 import {
   Plus,
@@ -17,33 +16,39 @@ import {
   Puzzle,
   Hash,
   Folder,
-  FolderOpen,
-  ChevronDown,
-  ChevronRight,
   Smartphone,
   Settings,
   X,
-  Sparkles,
+  MessageSquare,
 } from "lucide-react-native";
-import { useNavigation, TaskItem } from "../../context/NavigationContext";
+import { useNavigation } from "../../context/NavigationContext";
+import { useQuery } from "convex/react";
+import { api } from "@const-ai/backend";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.82, 320);
 
 export const TaskDrawer: React.FC = () => {
   const {
+    currentUserId,
     isTaskDrawerOpen,
     closeTaskDrawer,
     filterMode,
     setFilterMode,
-    projects,
     activeConversationId,
-    selectTask,
+    setActiveConversationId,
+    setActiveTaskTitle,
+    createNewConversation,
     setSettingsModalOpen,
   } = useNavigation();
 
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const dbConversations = useQuery(
+    api.conversations.listConversations,
+    currentUserId ? { userId: currentUserId as any } : "skip"
+  );
 
   useEffect(() => {
     if (isTaskDrawerOpen) {
@@ -75,12 +80,32 @@ export const TaskDrawer: React.FC = () => {
     }
   }, [isTaskDrawerOpen]);
 
-  if (!isTaskDrawerOpen) {
-    // Hidden when closed
-  }
+  const handleCreateNewTask = async () => {
+    closeTaskDrawer();
+    await createNewConversation("New Task");
+  };
+
+  const handleSelectConv = (conv: { _id: string; title: string }) => {
+    setActiveConversationId(conv._id);
+    setActiveTaskTitle(conv.title);
+    closeTaskDrawer();
+  };
+
+  const formatTimeAgo = (timestamp: number) => {
+    const diffMins = Math.floor((Date.now() - timestamp) / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d`;
+  };
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={isTaskDrawerOpen ? "auto" : "none"}>
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents={isTaskDrawerOpen ? "auto" : "none"}
+    >
       {/* Dimmed backdrop */}
       <TouchableWithoutFeedback onPress={closeTaskDrawer}>
         <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]} />
@@ -99,7 +124,7 @@ export const TaskDrawer: React.FC = () => {
         {/* Drawer Header with Close button */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <Text style={styles.brandTitle}>Const AI</Text>
+            <Text style={styles.brandTitle}>Const AI Mobile</Text>
           </View>
           <TouchableOpacity
             style={styles.closeBtn}
@@ -114,15 +139,13 @@ export const TaskDrawer: React.FC = () => {
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => {
-              closeTaskDrawer();
-            }}
+            onPress={handleCreateNewTask}
           >
             <View style={styles.actionLeft}>
               <Plus size={15} color="#e4e4e7" style={styles.actionIcon} />
               <Text style={styles.actionBtnText}>New task</Text>
             </View>
-            <Text style={styles.shortcutText}>Ctrl+N</Text>
+            <Text style={styles.shortcutText}>+ Task</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionBtn}>
@@ -157,14 +180,17 @@ export const TaskDrawer: React.FC = () => {
             ]}
             onPress={() => setFilterMode("group")}
           >
-            <Hash size={13} color={filterMode === "group" ? "#fafafa" : "#71717a"} />
+            <Hash
+              size={13}
+              color={filterMode === "group" ? "#fafafa" : "#71717a"}
+            />
             <Text
               style={[
                 styles.filterTabText,
                 filterMode === "group" && styles.filterTabTextActive,
               ]}
             >
-              Group
+              Tasks
             </Text>
           </TouchableOpacity>
 
@@ -175,74 +201,71 @@ export const TaskDrawer: React.FC = () => {
             ]}
             onPress={() => setFilterMode("project")}
           >
-            <Folder size={13} color={filterMode === "project" ? "#fafafa" : "#71717a"} />
+            <Folder
+              size={13}
+              color={filterMode === "project" ? "#fafafa" : "#71717a"}
+            />
             <Text
               style={[
                 styles.filterTabText,
                 filterMode === "project" && styles.filterTabTextActive,
               ]}
             >
-              Project
+              Projects
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Scrollable Tasks & Projects List */}
         <ScrollView style={styles.taskScroll} bounces={false}>
-          <Text style={styles.sectionHeader}>Projects</Text>
+          <Text style={styles.sectionHeader}>Active Tasks</Text>
 
-          {projects.map((project) => (
-            <View key={project.id} style={styles.projectBlock}>
-              {/* Folder Row */}
-              <View style={styles.folderRow}>
-                <Folder size={14} color="#a1a1aa" style={styles.folderIcon} />
-                <Text style={styles.folderName}>{project.name}</Text>
-              </View>
-
-              {/* Tasks under this Project */}
-              {project.tasks.length === 0 ? (
-                <Text style={styles.emptyTaskText}>No tasks yet</Text>
-              ) : (
-                <View style={styles.taskList}>
-                  {project.tasks.map((task) => {
-                    const isActive = task.id === activeConversationId;
-                    return (
-                      <TouchableOpacity
-                        key={task.id}
-                        style={[
-                          styles.taskItemRow,
-                          isActive && styles.taskItemRowActive,
-                        ]}
-                        onPress={() => selectTask(task)}
-                      >
-                        <Text
-                          style={[
-                            styles.taskItemTitle,
-                            isActive && styles.taskItemTitleActive,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {task.title}
-                        </Text>
-                        <Text style={styles.taskItemTime}>{task.timeAgo}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  {project.tasks.length > 4 && (
-                    <TouchableOpacity style={styles.showMoreBtn}>
-                      <Text style={styles.showMoreText}>Show more</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
+          {!dbConversations || dbConversations.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MessageSquare size={20} color="#3f3f46" />
+              <Text style={styles.emptyTaskText}>No active tasks yet</Text>
+              <TouchableOpacity
+                style={styles.btnCreateFirst}
+                onPress={handleCreateNewTask}
+              >
+                <Text style={styles.btnCreateFirstText}>+ Create Task</Text>
+              </TouchableOpacity>
             </View>
-          ))}
+          ) : (
+            <View style={styles.taskList}>
+              {dbConversations.map((conv) => {
+                const isActive = conv._id === activeConversationId;
+                return (
+                  <TouchableOpacity
+                    key={conv._id}
+                    style={[
+                      styles.taskItemRow,
+                      isActive && styles.taskItemRowActive,
+                    ]}
+                    onPress={() => handleSelectConv(conv)}
+                  >
+                    <Text
+                      style={[
+                        styles.taskItemTitle,
+                        isActive && styles.taskItemTitleActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {conv.title}
+                    </Text>
+                    <Text style={styles.taskItemTime}>
+                      {formatTimeAgo(conv.updatedAt)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
 
         {/* User Profile & Device Status Footer */}
         <View style={styles.footer}>
           <View style={styles.profileLeft}>
-            {/* Avatar badge */}
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>AC</Text>
             </View>
@@ -258,7 +281,6 @@ export const TaskDrawer: React.FC = () => {
             </View>
           </View>
 
-          {/* Settings button */}
           <TouchableOpacity
             style={styles.settingsBtn}
             onPress={() => {
@@ -349,27 +371,29 @@ const styles = StyleSheet.create({
   shortcutText: {
     color: "#52525b",
     fontSize: 11,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontFamily: "monospace",
   },
   filterContainer: {
     flexDirection: "row",
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 6,
+    paddingVertical: 6,
+    backgroundColor: "#141418",
+    marginHorizontal: 10,
+    marginTop: 8,
+    borderRadius: 8,
+    gap: 4,
   },
   filterTab: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    justifyContent: "center",
     paddingVertical: 5,
     borderRadius: 6,
-    backgroundColor: "#18181b",
     gap: 5,
   },
   filterTabActive: {
-    backgroundColor: "#27272a",
-    borderWidth: 1,
-    borderColor: "#3f3f46",
+    backgroundColor: "#22222a",
   },
   filterTabText: {
     color: "#71717a",
@@ -378,11 +402,11 @@ const styles = StyleSheet.create({
   },
   filterTabTextActive: {
     color: "#fafafa",
-    fontWeight: "600",
   },
   taskScroll: {
     flex: 1,
     paddingHorizontal: 10,
+    paddingTop: 8,
   },
   sectionHeader: {
     color: "#71717a",
@@ -390,54 +414,48 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 10,
-    marginBottom: 6,
+    marginVertical: 6,
     paddingHorizontal: 6,
   },
-  projectBlock: {
-    marginBottom: 12,
-  },
-  folderRow: {
-    flexDirection: "row",
+  emptyContainer: {
     alignItems: "center",
-    paddingVertical: 5,
-    paddingHorizontal: 6,
+    justifyContent: "center",
+    paddingVertical: 30,
+    gap: 8,
   },
-  folderIcon: {
-    marginRight: 8,
+  emptyTaskText: {
+    color: "#71717a",
+    fontSize: 12,
   },
-  folderName: {
-    color: "#a1a1aa",
+  btnCreateFirst: {
+    backgroundColor: "#27272a",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  btnCreateFirstText: {
+    color: "#f4f4f5",
     fontSize: 12,
     fontWeight: "500",
   },
-  emptyTaskText: {
-    color: "#52525b",
-    fontSize: 12,
-    paddingLeft: 28,
-    paddingVertical: 4,
-    fontStyle: "italic",
-  },
   taskList: {
-    paddingLeft: 12,
     gap: 2,
   },
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 8,
     borderRadius: 6,
   },
   taskItemRowActive: {
-    backgroundColor: "#222228",
-    borderLeftWidth: 2,
-    borderLeftColor: "#38bdf8",
+    backgroundColor: "#1f1f26",
   },
   taskItemTitle: {
     color: "#a1a1aa",
-    fontSize: 12.5,
+    fontSize: 12,
     flex: 1,
     marginRight: 6,
   },
@@ -447,52 +465,45 @@ const styles = StyleSheet.create({
   },
   taskItemTime: {
     color: "#52525b",
-    fontSize: 11,
-  },
-  showMoreBtn: {
-    paddingVertical: 4,
-    paddingLeft: 8,
-  },
-  showMoreText: {
-    color: "#71717a",
-    fontSize: 11.5,
+    fontSize: 10,
+    fontFamily: "monospace",
   },
   footer: {
     height: 54,
     borderTopWidth: 1,
     borderTopColor: "#1e1e24",
-    backgroundColor: "#0d0d10",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
+    backgroundColor: "#111114",
   },
   profileLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 9,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#6366f1",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#3b82f6",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 9,
   },
   avatarText: {
-    color: "#fafafa",
-    fontSize: 12,
-    fontWeight: "bold",
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "600",
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
     color: "#fafafa",
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
   },
   deviceStatusRow: {
     flexDirection: "row",
@@ -501,12 +512,11 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   deviceStatusText: {
-    color: "#22c55e",
-    fontSize: 10.5,
-    fontWeight: "500",
+    color: "#71717a",
+    fontSize: 10,
   },
   settingsBtn: {
-    padding: 8,
+    padding: 6,
     borderRadius: 6,
   },
 });

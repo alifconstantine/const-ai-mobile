@@ -102,7 +102,9 @@ graph LR
 
 ### 3.2. Main Chat Stream & Interaksi Komponen (`app/index.tsx`)
 - [ ] Sinkronisasi realtime keys dan config dari Convex ke Mobile.
-- [ ] **User Message Card**: Teks prompt gelap modern + footer tombol **`[📋 Copy]`** dan **`[✏️ Edit]`** (dengan aksi rewind).
+- [ ] **Context Compaction & Token Budgeting (Diadopsi dari const-harness)**:
+  - Auto-summarize turn percakapan lama saat context window > 80% untuk menghemat memori & token HP.
+- [ ] **User Message Card**: Teks prompt gelap modern + footer tombol **`[📋 Copy]`** dan **`[✏️ Edit]`** (dengan aksi rewind & shadow git rollback).
 - [ ] **AI Response & Execution Activity**:
   - **Accordion *"Worked for 44s v"***: Rincian sub-langkah eksekusi tools (`Ran $ curl ...`, `Wrote 📄 server.js +42`, dll.).
   - **Main Markdown Output**: Render Markdown, sintaks kode, dan tabel.
@@ -151,7 +153,11 @@ graph LR
 - [ ] Multi-tab console: `Terminal`, `PowerShell`, `Termux Linux`, `Shizuku ADB`.
 - [ ] Streaming stdout/stderr output real-time dengan command input line interaktif.
 
-### 3.6. On-Device Neural Voice TTS Player (`services/voice/supertonicPlayer.ts`)
+### 3.6. Shadow Git Snapshots & Undo Turn Rollback (`services/git/snapshotBridge.ts`)
+- [ ] Shadow git checkpointing per-turn chat.
+- [ ] Tombol `[Undo changes]` di action card & review drawer untuk rollback perubahan file fisik di storage/Termux.
+
+### 3.7. On-Device Neural Voice TTS Player (`services/voice/supertonicPlayer.ts`)
 - [ ] Audio synthesizer & queue player untuk memutar audio WAV 44.1kHz Supertonic-3.
 - [ ] Voice waveform animation widget saat audio berbunyi.
 
@@ -160,3 +166,5 @@ graph LR
 - [ ] **Skenario 2 (UI Automation):** Navigasi YouTube/Gojek via Accessibility Spatial Coordinate.
 - [ ] **Skenario 3 (Shizuku Privileged):** Bersihkan cache terproteksi `/Android/data` tanpa root.
 - [ ] **Skenario 4 (On-Device Voice):** Respon AI bersuara instan via Supertonic-3 offline.
+- [ ] **Skenario 5 (Shadow Git Rollback):** Undo modifikasi kode instan ke state sebelum perintah dieksekusi.
+
