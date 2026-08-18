@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",
+    "@clerk/expo": "^4.4.0",
     "@const-ai/backend": "workspace:*",
     "@const-ai/types": "workspace:*",
     "@expo/metro-runtime": "~4.0.1",
@@ -19,7 +20,9 @@
     "expo-constants": "~17.0.7",
     "expo-linking": "~7.0.5",
     "expo-router": "~4.0.17",
+    "expo-secure-store": "^57.0.1",
     "expo-status-bar": "~2.0.1",
+    "expo-web-browser": "^57.0.2",
     "lucide-react-native": "^1.31.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",

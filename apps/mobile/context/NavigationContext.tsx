@@ -6,8 +6,9 @@ import React, {
   ReactNode,
 } from "react";
 import { OperatingMode } from "@const-ai/types";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@const-ai/backend";
+import { useAuth, useUser } from "@clerk/expo";
 
 export type ReviewTabType =
   | "Review"
@@ -102,7 +103,7 @@ export interface UserConfigData {
 }
 
 interface NavigationContextType {
-  // User & Authentication
+  // User & Authentication (Clerk + Convex)
   currentUserId: string | null;
   currentUser: UserProfile | null;
   userConfig: UserConfigData | null;
@@ -145,10 +146,8 @@ interface NavigationContextType {
   projects: ProjectFolder[];
   workspaces: WorkspaceItem[];
 
-  // Auth Methods
-  loginWithDevAccount: () => Promise<boolean>;
-  loginWithCredentials: (email: string, name?: string, username?: string) => Promise<boolean>;
-  logout: () => void;
+  // Auth & Sync Methods
+  logout: () => Promise<void>;
   updateUserProfile: (data: { name?: string; username?: string; avatarUrl?: string }) => Promise<boolean>;
   updateUserSettings: (data: {
     activeModel?: string;
@@ -249,6 +248,9 @@ const INITIAL_TABS: SideTabItem[] = [
 export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
+  const { isSignedIn, isLoaded: isAuthLoaded, signOut } = useAuth();
+  const { user: clerkUser } = useUser();
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userConfig, setUserConfig] = useState<UserConfigData | null>(null);
@@ -288,112 +290,78 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [activeTabId, setActiveTabId] = useState<string>("tab-review");
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(INITIAL_WORKSPACES);
 
-  const getOrCreateUser = useMutation(api.users.getOrCreateDefaultUser);
+  // Live Convex query for the authenticated user
+  const viewer = useQuery(api.users.viewer, isSignedIn ? {} : "skip");
+  const syncClerkUserMutation = useMutation(api.users.syncClerkUser);
   const updateProfileMutation = useMutation(api.users.updateProfile);
   const updateUserConfigMutation = useMutation(api.users.updateUserConfig);
   const createConv = useMutation(api.conversations.createConversation);
 
-  // Initialize Default User on mount
+  // Sync Clerk User and Convex Viewer into state
   useEffect(() => {
-    let isMounted = true;
-    setIsAuthLoading(true);
+    if (!isAuthLoaded) {
+      setIsAuthLoading(true);
+      return;
+    }
 
-    getOrCreateUser({})
-      .then((res) => {
-        if (isMounted && res?.user?._id) {
-          const userObj: UserProfile = {
-            _id: res.user._id,
-            id: res.user._id,
-            name: res.user.name || "Alif Constantine",
-            username: res.user.username || "alif",
-            email: res.user.email || "alif@constai.platform",
-            avatarUrl: res.user.avatarUrl || res.user.image,
-            initials: res.user.initials || "AC",
-            subscriptionPlan: res.user.subscriptionPlan || "yearly",
-            subscriptionStatus: res.user.subscriptionStatus || "active",
-            creditsBalanceUsd: res.user.creditsBalanceUsd || 100.0,
-          };
+    if (isSignedIn && clerkUser) {
+      const email =
+        clerkUser.primaryEmailAddress?.emailAddress ||
+        clerkUser.emailAddresses?.[0]?.emailAddress ||
+        "";
+      const name =
+        clerkUser.fullName ||
+        [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+        viewer?.name ||
+        email.split("@")[0] ||
+        "Operator";
+      const username =
+        clerkUser.username ||
+        viewer?.username ||
+        (email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") : "operator");
+      const avatarUrl = clerkUser.imageUrl || viewer?.avatarUrl || viewer?.image || "";
 
-          setCurrentUserId(res.user._id);
-          setCurrentUser(userObj);
-          setIsAuthenticated(true);
+      // Auto-sync Clerk user with Convex if new
+      if (viewer === null && email) {
+        syncClerkUserMutation({
+          email,
+          name,
+          username,
+          avatarUrl,
+        }).catch((err) => console.warn("Auto-sync Clerk user to Convex error:", err));
+      }
 
-          if (res.config) {
-            const configObj: UserConfigData = {
-              _id: res.config._id,
-              activeModel: res.config.activeModel || "Const",
-              provider: res.config.provider || "custom_openai",
-              customBaseUrl: res.config.customBaseUrl || "",
-              customApiKeys: res.config.customApiKeys || {},
-              customProviders: res.config.customProviders || [],
-              operatingMode: (res.config.operatingMode as OperatingMode) || "ask_before_change",
-              systemPersona: res.config.systemPersona,
-              temperature: res.config.temperature,
-              voiceSettings: res.config.voiceSettings as any,
-            };
-
-            setUserConfig(configObj);
-            setActiveModel(configObj.activeModel);
-            setActiveOperatingMode(configObj.operatingMode);
-            if (configObj.customBaseUrl) {
-              setCustomBaseUrl(configObj.customBaseUrl);
-            }
-            if (configObj.customApiKeys?.openAi) {
-              setCustomApiKey(configObj.customApiKeys.openAi);
-            }
-          }
-        }
-      })
-      .catch((err) => {
-        console.warn("Convex connection warning (local mode fallback):", err);
-      })
-      .finally(() => {
-        if (isMounted) setIsAuthLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const loginWithDevAccount = async (): Promise<boolean> => {
-    setIsAuthLoading(true);
-    try {
-      const res = await getOrCreateUser({
-        email: "alif@constai.platform",
-        name: "Alif Constantine",
-      });
-
-      if (res?.user?._id) {
+      if (viewer) {
+        const viewerDoc = viewer as any;
         const userObj: UserProfile = {
-          _id: res.user._id,
-          id: res.user._id,
-          name: res.user.name || "Alif Constantine",
-          username: res.user.username || "alif",
-          email: res.user.email || "alif@constai.platform",
-          avatarUrl: res.user.avatarUrl || res.user.image,
-          initials: res.user.initials || "AC",
-          subscriptionPlan: res.user.subscriptionPlan || "yearly",
-          subscriptionStatus: res.user.subscriptionStatus || "active",
-          creditsBalanceUsd: res.user.creditsBalanceUsd || 100.0,
+          _id: viewer._id,
+          id: viewer._id || clerkUser.id,
+          name: viewer.name || name,
+          username: viewer.username || username,
+          email: viewer.email || email,
+          avatarUrl: viewer.avatarUrl || viewer.image || avatarUrl,
+          initials: (viewer.name || name).slice(0, 2).toUpperCase(),
+          subscriptionPlan: viewerDoc.subscriptionPlan || "yearly",
+          subscriptionStatus: viewerDoc.subscriptionStatus || "active",
+          creditsBalanceUsd: viewerDoc.creditsBalanceUsd ?? 100.0,
         };
 
-        setCurrentUserId(res.user._id);
+        setCurrentUserId(viewer._id || clerkUser.id);
         setCurrentUser(userObj);
         setIsAuthenticated(true);
 
-        if (res.config) {
+        if (viewer.config) {
           const configObj: UserConfigData = {
-            _id: res.config._id,
-            activeModel: res.config.activeModel || "Const",
-            provider: res.config.provider || "custom_openai",
-            customBaseUrl: res.config.customBaseUrl || "",
-            customApiKeys: res.config.customApiKeys || {},
-            customProviders: res.config.customProviders || [],
-            operatingMode: (res.config.operatingMode as OperatingMode) || "ask_before_change",
-            systemPersona: res.config.systemPersona,
-            temperature: res.config.temperature,
-            voiceSettings: res.config.voiceSettings as any,
+            _id: viewer.config._id,
+            activeModel: viewer.config.activeModel || "Const",
+            provider: viewer.config.provider || "custom_openai",
+            customBaseUrl: viewer.config.customBaseUrl || "",
+            customApiKeys: viewer.config.customApiKeys || {},
+            customProviders: viewer.config.customProviders || [],
+            operatingMode: (viewer.config.operatingMode as OperatingMode) || "ask_before_change",
+            systemPersona: viewer.config.systemPersona,
+            temperature: viewer.config.temperature,
+            voiceSettings: viewer.config.voiceSettings as any,
           };
           setUserConfig(configObj);
           setActiveModel(configObj.activeModel);
@@ -401,81 +369,38 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
           if (configObj.customBaseUrl) setCustomBaseUrl(configObj.customBaseUrl);
           if (configObj.customApiKeys?.openAi) setCustomApiKey(configObj.customApiKeys.openAi);
         }
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error("Login with dev account failed:", err);
-      return false;
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const loginWithCredentials = async (
-    email: string,
-    name?: string,
-    username?: string
-  ): Promise<boolean> => {
-    setIsAuthLoading(true);
-    try {
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanName = name?.trim() || cleanEmail.split("@")[0];
-      const cleanUsername =
-        username?.trim() || cleanEmail.split("@")[0].replace(/[^a-z0-9_]/g, "");
-
-      const res = await getOrCreateUser({
-        email: cleanEmail,
-        name: cleanName,
-      });
-
-      if (res?.user?._id) {
-        const userObj: UserProfile = {
-          _id: res.user._id,
-          id: res.user._id,
-          name: res.user.name || cleanName,
-          username: res.user.username || cleanUsername,
-          email: res.user.email || cleanEmail,
-          avatarUrl: res.user.avatarUrl || res.user.image,
-          initials: (cleanName.slice(0, 2) || "OP").toUpperCase(),
-          subscriptionPlan: res.user.subscriptionPlan || "yearly",
-          subscriptionStatus: res.user.subscriptionStatus || "active",
-          creditsBalanceUsd: res.user.creditsBalanceUsd || 50.0,
-        };
-
-        setCurrentUserId(res.user._id);
-        setCurrentUser(userObj);
+      } else {
+        // Fallback user state while Convex loads
+        setCurrentUserId(clerkUser.id);
+        setCurrentUser({
+          id: clerkUser.id,
+          name,
+          username,
+          email,
+          avatarUrl,
+          initials: name.slice(0, 2).toUpperCase(),
+          subscriptionPlan: "yearly",
+          subscriptionStatus: "active",
+          creditsBalanceUsd: 100.0,
+        });
         setIsAuthenticated(true);
-
-        if (res.config) {
-          const configObj: UserConfigData = {
-            _id: res.config._id,
-            activeModel: res.config.activeModel || "Const",
-            provider: res.config.provider || "custom_openai",
-            customBaseUrl: res.config.customBaseUrl || "",
-            customApiKeys: res.config.customApiKeys || {},
-            customProviders: res.config.customProviders || [],
-            operatingMode: (res.config.operatingMode as OperatingMode) || "ask_before_change",
-            systemPersona: res.config.systemPersona,
-            temperature: res.config.temperature,
-            voiceSettings: res.config.voiceSettings as any,
-          };
-          setUserConfig(configObj);
-          setActiveModel(configObj.activeModel);
-          setActiveOperatingMode(configObj.operatingMode);
-        }
-        return true;
       }
-      return false;
-    } catch (err) {
-      console.error("Login with credentials failed:", err);
-      return false;
-    } finally {
-      setIsAuthLoading(false);
+    } else {
+      // User is signed out
+      setCurrentUserId(null);
+      setCurrentUser(null);
+      setUserConfig(null);
+      setIsAuthenticated(false);
     }
-  };
+    setIsAuthLoading(false);
+  }, [isSignedIn, isAuthLoaded, clerkUser, viewer]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.warn("Sign out error:", err);
+    }
     setCurrentUserId(null);
     setCurrentUser(null);
     setUserConfig(null);
@@ -702,8 +627,6 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         projects: [],
         workspaces,
 
-        loginWithDevAccount,
-        loginWithCredentials,
         logout,
         updateUserProfile,
         updateUserSettings,
@@ -768,3 +691,4 @@ export const useNavigation = () => {
   }
   return context;
 };
+

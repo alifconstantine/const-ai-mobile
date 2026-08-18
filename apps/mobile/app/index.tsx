@@ -172,6 +172,14 @@ export default function HomeScreen() {
     }
   };
 
+  if (isAuthLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Bot size={36} color="#38bdf8" />
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}

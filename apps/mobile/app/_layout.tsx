@@ -1,16 +1,24 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ClerkProvider, useAuth } from "@clerk/expo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationProvider } from "../context/NavigationContext";
+import { tokenCache } from "../services/auth/tokenCache";
+
+const publishableKey =
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  "pk_test_bmF0dXJhbC1sZW1taW5nLTQ2NDQuY2xlcmsuYWNjb3VudHMuZGV2JA";
 
 const convexUrl =
-  process.env.EXPO_PUBLIC_CONVEX_URL || "https://dummy-convex-url.convex.cloud";
-const convex = new ConvexReactClient(convexUrl);
+  process.env.EXPO_PUBLIC_CONVEX_URL || "http://127.0.0.1:3210";
 
 export default function RootLayout() {
+  const convex = useMemo(() => new ConvexReactClient(convexUrl), []);
+
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
       const styleId = "const-ai-web-reset";
@@ -49,20 +57,23 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ConvexProvider client={convex}>
-        <NavigationProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: "#09090b" },
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-          </Stack>
-        </NavigationProvider>
-      </ConvexProvider>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+          <NavigationProvider>
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: "#09090b" },
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="sso-callback" />
+            </Stack>
+          </NavigationProvider>
+        </ConvexProviderWithClerk>
+      </ClerkProvider>
     </SafeAreaProvider>
   );
 }

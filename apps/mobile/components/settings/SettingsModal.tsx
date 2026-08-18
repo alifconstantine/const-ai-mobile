@@ -172,9 +172,9 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setSettingsModalOpen(false);
-    logout();
+    await logout();
     router.replace("/login");
   };
 

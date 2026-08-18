@@ -17,66 +17,222 @@ import {
   Zap,
   ShieldCheck,
   Mail,
-  User,
+  Lock,
   ArrowRight,
   Sparkles,
   Smartphone,
+  Globe,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react-native";
-import { useNavigation } from "../context/NavigationContext";
+import { useSignIn, useSignUp, useSSO } from "@clerk/expo";
+import * as WebBrowser from "expo-web-browser";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { loginWithDevAccount, loginWithCredentials, isAuthLoading } =
-    useNavigation();
 
-  const [email, setEmail] = useState("alif@constai.platform");
-  const [name, setName] = useState("Alif Constantine");
-  const [username, setUsername] = useState("alif");
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  const { startSSOFlow } = useSSO();
+  const { signIn, errors: signInErrors, fetchStatus: signInFetchStatus } = useSignIn();
+  const { signUp, errors: signUpErrors, fetchStatus: signUpFetchStatus } = useSignUp();
+
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
-  const [isLoadingDev, setIsLoadingDev] = useState(false);
-  const [isLoadingCustom, setIsLoadingCustom] = useState(false);
+  const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
+  const [isLoadingGithub, setIsLoadingGithub] = useState(false);
+  const [isLoadingEmail, setIsLoadingEmail] = useState(false);
 
-  const handleDevLogin = async () => {
+  // Google SSO Auth
+  const handleGoogleSignIn = async () => {
     setErrorMessage("");
-    setIsLoadingDev(true);
+    setIsLoadingGoogle(true);
     try {
-      const success = await loginWithDevAccount();
-      if (success) {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: "oauth_google",
+      });
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
         router.replace("/");
-      } else {
-        setErrorMessage("Gagal masuk dengan akun dev default. Periksa koneksi backend Convex.");
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || "Terjadi kesalahan saat login");
+      if (err?.code === "ERR_CANCELED" || err?.code === "SIGN_IN_CANCELLED") {
+        return;
+      }
+      console.error("Google sign-in error:", err);
+      setErrorMessage(
+        err?.errors?.[0]?.message ||
+          err?.message ||
+          "Gagal masuk dengan Google. Coba lagi."
+      );
     } finally {
-      setIsLoadingDev(false);
+      setIsLoadingGoogle(false);
     }
   };
 
-  const handleCustomLogin = async () => {
-    if (!email.trim() || !email.includes("@")) {
-      setErrorMessage("Masukkan alamat email yang valid");
-      return;
-    }
+  // GitHub SSO Auth
+  const handleGithubSignIn = async () => {
     setErrorMessage("");
-    setIsLoadingCustom(true);
+    setIsLoadingGithub(true);
     try {
-      const success = await loginWithCredentials(
-        email.trim(),
-        name.trim() || undefined,
-        username.trim() || undefined
-      );
-      if (success) {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: "oauth_github",
+      });
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
         router.replace("/");
-      } else {
-        setErrorMessage("Gagal masuk dengan akun tersebut. Coba lagi.");
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || "Terjadi kesalahan saat login");
+      if (err?.code === "ERR_CANCELED" || err?.code === "SIGN_IN_CANCELLED") {
+        return;
+      }
+      console.error("GitHub sign-in error:", err);
+      setErrorMessage(
+        err?.errors?.[0]?.message ||
+          err?.message ||
+          "Gagal masuk dengan GitHub. Coba lagi."
+      );
     } finally {
-      setIsLoadingCustom(false);
+      setIsLoadingGithub(false);
+    }
+  };
+
+  // Email + Password Sign In
+  const handleEmailSignIn = async () => {
+    if (!email.trim() || !password) {
+      setErrorMessage("Masukkan email dan password");
+      return;
+    }
+
+    setErrorMessage("");
+    setIsLoadingEmail(true);
+    try {
+      const { error } = await signIn.password({
+        emailAddress: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setErrorMessage(error.message || "Email atau password salah.");
+        return;
+      }
+
+      if (signIn.status === "complete") {
+        await signIn.finalize({
+          navigate: () => router.replace("/"),
+        });
+      } else {
+        setErrorMessage("Autentikasi belum lengkap. Periksa status akun Anda.");
+      }
+    } catch (err: any) {
+      console.error("Email sign-in error:", err);
+      setErrorMessage(
+        err?.message ||
+          "Terjadi kesalahan saat masuk dengan email."
+      );
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
+
+  // Email + Password Sign Up
+  const handleEmailSignUp = async () => {
+    if (!email.trim() || !password) {
+      setErrorMessage("Masukkan email dan password baru");
+      return;
+    }
+    if (password.length < 8) {
+      setErrorMessage("Password minimal 8 karakter");
+      return;
+    }
+
+    setErrorMessage("");
+    setIsLoadingEmail(true);
+    try {
+      const { error } = await signUp.password({
+        emailAddress: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setErrorMessage(error.message || "Gagal mendaftarkan akun.");
+        return;
+      }
+
+      if (signUp.status === "complete") {
+        await signUp.finalize({
+          navigate: () => router.replace("/"),
+        });
+      } else if (signUp.status === "missing_requirements") {
+        await signUp.verifications.sendEmailCode();
+        setPendingVerification(true);
+      }
+    } catch (err: any) {
+      console.error("Sign-up error:", err);
+      setErrorMessage(
+        err?.message ||
+          "Gagal mendaftarkan akun baru."
+      );
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
+
+  // Verify Email Code
+  const handleVerifyCode = async () => {
+    if (!verificationCode.trim()) {
+      setErrorMessage("Masukkan kode verifikasi 6 digit");
+      return;
+    }
+
+    setErrorMessage("");
+    setIsLoadingEmail(true);
+    try {
+      const { error } = await signUp.verifications.verifyEmailCode({
+        code: verificationCode.trim(),
+      });
+
+      if (error) {
+        setErrorMessage(error.message || "Kode verifikasi tidak valid.");
+        return;
+      }
+
+      if (signUp.status === "complete") {
+        await signUp.finalize({
+          navigate: () => router.replace("/"),
+        });
+      } else {
+        setErrorMessage("Verifikasi belum selesai. Coba masukkan kode kembali.");
+      }
+    } catch (err: any) {
+      console.error("Verification error:", err);
+      setErrorMessage(
+        err?.message ||
+          "Kode verifikasi tidak valid atau telah kedaluwarsa."
+      );
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
+
+  // Open Web Login in Browser
+  const handleOpenWebLogin = async () => {
+    try {
+      const frontendApi =
+        process.env.EXPO_PUBLIC_CLERK_FRONTEND_API_URL ||
+        "https://natural-lemming-4644.clerk.accounts.dev";
+      const webUrl = `${frontendApi}/sign-in?redirect_url=constai://sso-callback`;
+      await WebBrowser.openAuthSessionAsync(webUrl, "constai://sso-callback");
+    } catch (err) {
+      console.warn("Web login browser error:", err);
     }
   };
 
@@ -98,61 +254,71 @@ export default function LoginScreen() {
               <Bot size={34} color="#38bdf8" />
             </View>
           </View>
-          <Text style={styles.brandTitle}>Const AI Mobile</Text>
+          <Text style={styles.brandTitle}>Const AI</Text>
           <Text style={styles.brandSubtitle}>
-            Autonomous On-Device Agent & Productivity Engine
+            Autonomous Multi-LLM Agent & On-Device Engine
           </Text>
 
           <View style={styles.featurePillsRow}>
             <View style={styles.featurePill}>
               <Zap size={11} color="#38bdf8" />
-              <Text style={styles.featurePillText}>Multi-LLM</Text>
+              <Text style={styles.featurePillText}>Clerk Unified</Text>
             </View>
             <View style={styles.featurePill}>
               <ShieldCheck size={11} color="#22c55e" />
-              <Text style={styles.featurePillText}>Safety HITL</Text>
+              <Text style={styles.featurePillText}>Convex Realtime</Text>
             </View>
             <View style={styles.featurePill}>
               <Smartphone size={11} color="#f59e0b" />
-              <Text style={styles.featurePillText}>Native Fast-Path</Text>
+              <Text style={styles.featurePillText}>Native Sync</Text>
             </View>
           </View>
         </View>
 
-        {/* Error Alert */}
+        {/* Error Banner */}
         {errorMessage ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         ) : null}
 
-        {/* Card Form */}
+        {/* Auth Card */}
         <View style={styles.card}>
-          {/* Quick 1-Click Dev Sign-in */}
-          <View style={styles.devSection}>
-            <View style={styles.devHeader}>
-              <Sparkles size={14} color="#38bdf8" />
-              <Text style={styles.devSectionTitle}>Quick Dev Access</Text>
-              <View style={styles.devBadge}>
-                <Text style={styles.devBadgeText}>RECOMMENDED</Text>
-              </View>
-            </View>
-            <Text style={styles.devDesc}>
-              Masuk instan sebagai Developer Operator dengan profil dan BYOK API keys yang sudah terkonfigurasi di Convex.
-            </Text>
+          {/* SSO Web OAuth Buttons */}
+          <View style={styles.ssoSection}>
+            <Text style={styles.sectionLabel}>MASUK DENGAN AKUN WEB</Text>
 
+            {/* Google SSO */}
             <TouchableOpacity
-              style={styles.btnDevLogin}
-              onPress={handleDevLogin}
-              disabled={isLoadingDev || isLoadingCustom || isAuthLoading}
+              style={styles.btnGoogle}
+              onPress={handleGoogleSignIn}
+              disabled={isLoadingGoogle || isLoadingGithub || isLoadingEmail}
               activeOpacity={0.8}
             >
-              {isLoadingDev ? (
+              {isLoadingGoogle ? (
                 <ActivityIndicator size="small" color="#09090b" />
               ) : (
                 <>
-                  <Text style={styles.btnDevLoginText}>Continue as Alif Constantine</Text>
+                  <Globe size={18} color="#09090b" />
+                  <Text style={styles.btnGoogleText}>Continue with Google</Text>
                   <ArrowRight size={16} color="#09090b" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* GitHub SSO */}
+            <TouchableOpacity
+              style={styles.btnGithub}
+              onPress={handleGithubSignIn}
+              disabled={isLoadingGoogle || isLoadingGithub || isLoadingEmail}
+              activeOpacity={0.8}
+            >
+              {isLoadingGithub ? (
+                <ActivityIndicator size="small" color="#fafafa" />
+              ) : (
+                <>
+                  <KeyRound size={16} color="#a1a1aa" />
+                  <Text style={styles.btnGithubText}>Continue with GitHub</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -161,89 +327,181 @@ export default function LoginScreen() {
           {/* Divider */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR SIGN IN WITH CUSTOM ACCOUNT</Text>
+            <Text style={styles.dividerText}>ATAU EMAIL & PASSWORD</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Custom Form Toggle & Inputs */}
-          {!isCustomMode ? (
-            <TouchableOpacity
-              style={styles.btnToggleCustom}
-              onPress={() => setIsCustomMode(true)}
-            >
-              <Mail size={14} color="#a1a1aa" />
-              <Text style={styles.btnToggleCustomText}>Masuk dengan Email / Akun Lain</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.customForm}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email Address</Text>
+          {/* Tab Selector: Sign In vs Sign Up */}
+          {!pendingVerification && (
+            <View style={styles.tabSwitcher}>
+              <TouchableOpacity
+                style={[styles.tabBtn, authMode === "signin" && styles.tabBtnActive]}
+                onPress={() => {
+                  setAuthMode("signin");
+                  setErrorMessage("");
+                }}
+              >
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    authMode === "signin" && styles.tabBtnTextActive,
+                  ]}
+                >
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tabBtn, authMode === "signup" && styles.tabBtnActive]}
+                onPress={() => {
+                  setAuthMode("signup");
+                  setErrorMessage("");
+                }}
+              >
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    authMode === "signup" && styles.tabBtnTextActive,
+                  ]}
+                >
+                  Create Account
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Email / Password Form */}
+          {!pendingVerification ? (
+            <View style={styles.formGroup}>
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Email</Text>
                 <View style={styles.inputWrapper}>
                   <Mail size={16} color="#71717a" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
-                    placeholder="nama@domain.com"
+                    placeholder="nama@email.com"
                     placeholderTextColor="#52525b"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
+                    autoCorrect={false}
                   />
                 </View>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Full Name</Text>
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Password</Text>
                 <View style={styles.inputWrapper}>
-                  <User size={16} color="#71717a" style={styles.inputIcon} />
+                  <Lock size={16} color="#71717a" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Alif Constantine"
+                    placeholder="••••••••"
                     placeholderTextColor="#52525b"
-                    value={name}
-                    onChangeText={setName}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Username Handle</Text>
-                <View style={styles.inputWrapper}>
-                  <Text style={styles.atPrefix}>@</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="alif"
-                    placeholderTextColor="#52525b"
-                    value={username}
-                    onChangeText={setUsername}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
                     autoCapitalize="none"
                   />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeBtn}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} color="#a1a1aa" />
+                    ) : (
+                      <Eye size={16} color="#a1a1aa" />
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
 
+              {/* Bot Protection mount point for Clerk */}
+              <View nativeID="clerk-captcha" />
+
               <TouchableOpacity
-                style={styles.btnCustomLogin}
-                onPress={handleCustomLogin}
-                disabled={isLoadingDev || isLoadingCustom || isAuthLoading}
+                style={styles.btnSubmit}
+                onPress={authMode === "signin" ? handleEmailSignIn : handleEmailSignUp}
+                disabled={isLoadingEmail || isLoadingGoogle || isLoadingGithub}
                 activeOpacity={0.8}
               >
-                {isLoadingCustom ? (
+                {isLoadingEmail ? (
                   <ActivityIndicator size="small" color="#fafafa" />
                 ) : (
                   <>
-                    <Text style={styles.btnCustomLoginText}>Sign In & Synchronize</Text>
+                    <Text style={styles.btnSubmitText}>
+                      {authMode === "signin" ? "Sign In to Const AI" : "Register Account"}
+                    </Text>
                     <ArrowRight size={16} color="#fafafa" />
                   </>
                 )}
               </TouchableOpacity>
             </View>
+          ) : (
+            /* OTP Verification Code Form */
+            <View style={styles.formGroup}>
+              <View style={styles.otpHeader}>
+                <Sparkles size={16} color="#38bdf8" />
+                <Text style={styles.otpTitle}>Verifikasi Email</Text>
+              </View>
+              <Text style={styles.otpDesc}>
+                Kode verifikasi 6 digit telah dikirim ke {email}.
+              </Text>
+
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Kode Verifikasi</Text>
+                <View style={styles.inputWrapper}>
+                  <KeyRound size={16} color="#71717a" style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.textInput, { letterSpacing: 4, fontWeight: "700" }]}
+                    placeholder="123456"
+                    placeholderTextColor="#52525b"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.btnSubmit}
+                onPress={handleVerifyCode}
+                disabled={isLoadingEmail}
+                activeOpacity={0.8}
+              >
+                {isLoadingEmail ? (
+                  <ActivityIndicator size="small" color="#fafafa" />
+                ) : (
+                  <Text style={styles.btnSubmitText}>Verifikasi & Masuk</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.btnBack}
+                onPress={() => setPendingVerification(false)}
+              >
+                <Text style={styles.btnBackText}>← Kembali ke Form</Text>
+              </TouchableOpacity>
+            </View>
           )}
+
+          {/* Web Browser Direct Portal Button */}
+          <TouchableOpacity
+            style={styles.btnWebFallback}
+            onPress={handleOpenWebLogin}
+            activeOpacity={0.7}
+          >
+            <Globe size={13} color="#71717a" />
+            <Text style={styles.btnWebFallbackText}>
+              Buka Halaman Login di Web Browser
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Footer */}
+        {/* Footer Note */}
         <View style={styles.footerNote}>
           <Text style={styles.footerNoteText}>
-            Const AI Platform • End-to-End Encrypted & Synced with Convex Backend
+            Secured by Clerk Authentication & Realtime Convex Synced
           </Text>
         </View>
       </ScrollView>
@@ -264,26 +522,26 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   logoBadgeContainer: {
     position: "relative",
-    marginBottom: 14,
+    marginBottom: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   logoGlow: {
     position: "absolute",
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "rgba(56, 189, 248, 0.25)",
     transform: [{ scale: 1.15 }],
   },
   logoIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#18181b",
     borderWidth: 1.5,
     borderColor: "#38bdf8",
@@ -303,12 +561,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   brandSubtitle: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: "#a1a1aa",
     textAlign: "center",
     maxWidth: 280,
-    lineHeight: 18,
-    marginBottom: 14,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   featurePillsRow: {
     flexDirection: "row",
@@ -322,11 +580,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#27272a",
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3.5,
     borderRadius: 999,
   },
   featurePillText: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "500",
     color: "#d4d4d8",
   },
@@ -336,7 +594,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239, 68, 68, 0.3)",
     borderRadius: 8,
     padding: 10,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   errorText: {
     color: "#f87171",
@@ -355,46 +613,17 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
-  devSection: {
-    backgroundColor: "#18181b",
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.25)",
-    borderRadius: 12,
-    padding: 14,
+  ssoSection: {
+    gap: 8,
   },
-  devHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 6,
-  },
-  devSectionTitle: {
-    color: "#fafafa",
-    fontSize: 13.5,
+  sectionLabel: {
+    color: "#71717a",
+    fontSize: 10,
     fontWeight: "600",
-    flex: 1,
-  },
-  devBadge: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.35)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  devBadgeText: {
-    color: "#38bdf8",
-    fontSize: 9,
-    fontWeight: "700",
     letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  devDesc: {
-    color: "#a1a1aa",
-    fontSize: 11.5,
-    lineHeight: 16,
-    marginBottom: 12,
-  },
-  btnDevLogin: {
+  btnGoogle: {
     backgroundColor: "#38bdf8",
     borderRadius: 8,
     paddingVertical: 11,
@@ -404,16 +633,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  btnDevLoginText: {
+  btnGoogleText: {
     color: "#09090b",
     fontSize: 13,
     fontWeight: "600",
+    flex: 1,
+    textAlign: "center",
+  },
+  btnGithub: {
+    backgroundColor: "#18181b",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  btnGithubText: {
+    color: "#e4e4e7",
+    fontSize: 12.5,
+    fontWeight: "500",
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginVertical: 16,
+    marginVertical: 14,
   },
   dividerLine: {
     flex: 1,
@@ -426,31 +674,40 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.5,
   },
-  btnToggleCustom: {
+  tabSwitcher: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
     backgroundColor: "#18181b",
-    borderWidth: 1,
-    borderColor: "#27272a",
     borderRadius: 8,
-    paddingVertical: 10,
+    padding: 3,
+    marginBottom: 12,
   },
-  btnToggleCustomText: {
-    color: "#d4d4d8",
-    fontSize: 12.5,
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    alignItems: "center",
+    borderRadius: 6,
+  },
+  tabBtnActive: {
+    backgroundColor: "#27272a",
+  },
+  tabBtnText: {
+    fontSize: 11.5,
     fontWeight: "500",
+    color: "#71717a",
   },
-  customForm: {
-    gap: 12,
+  tabBtnTextActive: {
+    color: "#fafafa",
+    fontWeight: "600",
   },
-  inputGroup: {
+  formGroup: {
+    gap: 10,
+  },
+  inputBlock: {
     gap: 4,
   },
   inputLabel: {
     color: "#a1a1aa",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -468,19 +725,16 @@ const styles = StyleSheet.create({
   inputIcon: {
     marginRight: 8,
   },
-  atPrefix: {
-    color: "#71717a",
-    fontSize: 14,
-    fontWeight: "600",
-    marginRight: 4,
-  },
   textInput: {
     flex: 1,
     color: "#fafafa",
     fontSize: 13,
     padding: 0,
   },
-  btnCustomLogin: {
+  eyeBtn: {
+    padding: 4,
+  },
+  btnSubmit: {
     backgroundColor: "#27272a",
     borderWidth: 1,
     borderColor: "#3f3f46",
@@ -493,18 +747,57 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  btnCustomLoginText: {
+  btnSubmitText: {
     color: "#fafafa",
     fontSize: 13,
     fontWeight: "600",
   },
+  otpHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
+  otpTitle: {
+    color: "#fafafa",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  otpDesc: {
+    color: "#a1a1aa",
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  btnBack: {
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  btnBackText: {
+    color: "#71717a",
+    fontSize: 11.5,
+  },
+  btnWebFallback: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#1f1f23",
+  },
+  btnWebFallbackText: {
+    color: "#71717a",
+    fontSize: 11,
+  },
   footerNote: {
-    marginTop: 20,
+    marginTop: 16,
     alignItems: "center",
   },
   footerNoteText: {
     color: "#52525b",
-    fontSize: 10.5,
+    fontSize: 10,
     textAlign: "center",
   },
 });
