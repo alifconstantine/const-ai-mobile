@@ -310,16 +310,31 @@ export async function discoverProviderModels(
 ): Promise<DiscoveredModel[]> {
   try {
     let endpoint = "https://openrouter.ai/api/v1/models";
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-    };
+    const headers: Record<string, string> = {};
+
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
 
     if (provider === "gemini") {
       endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/models";
     } else if (provider === "openai") {
       endpoint = "https://api.openai.com/v1/models";
     } else if (provider === "custom_openai" && customBaseUrl) {
-      endpoint = `${customBaseUrl.replace(/\/+$/, "")}/models`;
+      let trimmed = customBaseUrl.trim().replace(/\/+$/, "");
+      if (trimmed.endsWith("/response")) {
+        trimmed = trimmed.slice(0, -"/response".length).replace(/\/+$/, "");
+      }
+      if (trimmed.endsWith("/chat/completions")) {
+        trimmed = trimmed.slice(0, -"/chat/completions".length).replace(/\/+$/, "");
+      }
+      if (trimmed.endsWith("/models")) {
+        endpoint = trimmed;
+      } else if (trimmed.endsWith("/v1")) {
+        endpoint = `${trimmed}/models`;
+      } else {
+        endpoint = `${trimmed}/v1/models`;
+      }
     }
 
     const res = await fetch(endpoint, { headers });
@@ -328,14 +343,14 @@ export async function discoverProviderModels(
     }
 
     const data = await res.json();
-    const rawList = data.data || [];
+    const rawList = data.data || data.models || [];
 
     if (!Array.isArray(rawList) || rawList.length === 0) {
       return getCuratedDefaultModels();
     }
 
-    return rawList.slice(0, 50).map((m: Record<string, unknown>) => ({
-      id: String(m.id || ""),
+    return rawList.slice(0, 100).map((m: Record<string, unknown>) => ({
+      id: String(m.id || m.name || ""),
       name: String(m.name || m.id || ""),
       provider: provider,
       contextLength: Number(m.context_length || 128000),

@@ -23,28 +23,22 @@ import {
   Sparkles,
 } from "lucide-react";
 
-export default function DashboardOverviewPage() {
-  const [userName, setUserName] = useState("Alif Constantine");
-  const [activeModel, setActiveModel] = useState("Gemini 2.5 Flash");
-  const [voicePersona, setVoicePersona] = useState("Nova (Calm & Natural)");
+import { useQuery } from "convex/react";
+import { api } from "@const-ai/backend";
+import { useUser } from "@clerk/nextjs";
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const sessionStr = localStorage.getItem("const_user_session");
-      if (sessionStr) {
-        try {
-          const s = JSON.parse(sessionStr);
-          if (s.name) setUserName(s.name);
-          if (s.preferredModel === "claude") setActiveModel("Claude 3.7 Sonnet");
-          if (s.preferredModel === "openai") setActiveModel("GPT-4o");
-          if (s.voicePersona === "apex") setVoicePersona("Apex (Fast & Technical)");
-          if (s.voicePersona === "aria") setVoicePersona("Aria (Warm & Friendly)");
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }, []);
+export default function DashboardOverviewPage() {
+  const { user: clerkUser } = useUser();
+  const liveViewer = useQuery(api.users.viewer);
+
+  const userName =
+    liveViewer?.name ||
+    clerkUser?.fullName ||
+    clerkUser?.firstName ||
+    "Alif Constantine";
+
+  const activeModel = liveViewer?.config?.activeModel || "Const (Custom LLM)";
+  const voicePersona = liveViewer?.config?.voiceSettings?.selectedVoiceStyle || "M1 (Supertonic-3)";
 
   return (
     <div className="space-y-6 select-none">

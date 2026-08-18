@@ -162,26 +162,6 @@ function SignInContent() {
     }
   };
 
-  // One-Click Instant Demo Login
-  const handleInstantDemoLogin = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        "const_user_session",
-        JSON.stringify({
-          email: "demo@constai.platform",
-          name: "Alif Constantine (Operator)",
-          username: "alif_constantine",
-          avatarUrl:
-            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop",
-          isLoggedIn: true,
-          authMethod: "instant_demo",
-          loginAt: Date.now(),
-        })
-      );
-    }
-    router.push(redirectTarget);
-  };
-
   const isBusy = isLoading || fetchStatus === "fetching";
 
   return (
@@ -414,21 +394,6 @@ function SignInContent() {
           </p>
         </CardFooter>
       </Card>
-
-      {/* One-Click Instant Demo Access Box */}
-      <div className="w-full max-w-md pt-1">
-        <button
-          type="button"
-          onClick={handleInstantDemoLogin}
-          className="w-full py-2.5 px-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2 group cursor-pointer shadow-xs"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400 transition-transform group-hover:scale-110" />
-          <span>One-Click Instant Demo Access</span>
-          <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-1.5 py-0.5 rounded-md">
-            Fast Preview
-          </span>
-        </button>
-      </div>
     </div>
   );
 }

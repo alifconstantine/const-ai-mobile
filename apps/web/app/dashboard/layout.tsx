@@ -70,26 +70,6 @@ export default function DashboardLayout({
         return;
       }
 
-      // 3. Fallback to local session storage (e.g. Instant Demo Access)
-      const sessionStr = localStorage.getItem("const_user_session");
-      if (sessionStr) {
-        try {
-          const session = JSON.parse(sessionStr);
-          if (session && session.isLoggedIn) {
-            setIsAuthenticated(true);
-            setUserProfile({
-              name: session.name || "Alif Constantine",
-              username: session.username || "alif",
-              avatarUrl: session.avatarUrl || undefined,
-              email: session.email || "alif@constai.platform",
-            });
-            return;
-          }
-        } catch {
-          // parse failed
-        }
-      }
-
       // Wait if Clerk is still initializing
       if (!clerkIsLoaded) {
         return;
@@ -111,9 +91,6 @@ export default function DashboardLayout({
       } catch (err) {
         console.warn("Clerk SignOut notice:", err);
       }
-    }
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("const_user_session");
     }
     router.push("/sign-in");
   };
