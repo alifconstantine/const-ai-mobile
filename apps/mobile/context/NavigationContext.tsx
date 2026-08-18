@@ -321,21 +321,27 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         (email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") : "operator");
       const avatarUrl = clerkUser.imageUrl || viewer?.avatarUrl || viewer?.image || "";
 
-      // Auto-sync Clerk user with Convex if new
-      if (viewer === null && email) {
+      // Auto-sync Clerk user with Convex if new or missing ID
+      if ((viewer === null || !viewer?._id) && email) {
         syncClerkUserMutation({
           email,
           name,
           username,
           avatarUrl,
-        }).catch((err) => console.warn("Auto-sync Clerk user to Convex error:", err));
+        })
+          .then((result) => {
+            if (result?.user?._id) {
+              setCurrentUserId(result.user._id);
+            }
+          })
+          .catch((err) => console.warn("Auto-sync Clerk user to Convex error:", err));
       }
 
-      if (viewer) {
+      if (viewer && viewer._id) {
         const viewerDoc = viewer as any;
         const userObj: UserProfile = {
           _id: viewer._id,
-          id: viewer._id || clerkUser.id,
+          id: viewer._id,
           name: viewer.name || name,
           username: viewer.username || username,
           email: viewer.email || email,
@@ -346,7 +352,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
           creditsBalanceUsd: viewerDoc.creditsBalanceUsd ?? 100.0,
         };
 
-        setCurrentUserId(viewer._id || clerkUser.id);
+        setCurrentUserId(viewer._id);
         setCurrentUser(userObj);
         setIsAuthenticated(true);
 
@@ -370,8 +376,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
           if (configObj.customApiKeys?.openAi) setCustomApiKey(configObj.customApiKeys.openAi);
         }
       } else {
-        // Fallback user state while Convex loads
-        setCurrentUserId(clerkUser.id);
+        // Temporary preview state while Convex syncs
         setCurrentUser({
           id: clerkUser.id,
           name,

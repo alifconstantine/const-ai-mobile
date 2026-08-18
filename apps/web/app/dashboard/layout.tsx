@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ConstLogoIcon } from "@/components/ConstLogo";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser, useClerk, UserButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { api } from "@const-ai/backend";
 import {
@@ -119,14 +119,14 @@ export default function DashboardLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white flex flex-col md:flex-row antialiased select-none">
+    <div className="h-screen w-full bg-[#09090b] text-white flex flex-col md:flex-row overflow-hidden antialiased select-none">
       {/* ================= SIDEBAR ================= */}
-      <aside className="w-full md:w-64 bg-[#111113] border-b md:border-b-0 md:border-r border-zinc-800/80 p-4 flex flex-col justify-between shrink-0">
-        <div>
+      <aside className="w-full md:w-64 bg-[#111113] border-b md:border-b-0 md:border-r border-zinc-800/80 p-4 flex flex-col justify-between shrink-0 h-auto md:h-full z-20">
+        <div className="flex flex-col gap-4">
           {/* Logo Header */}
-          <div className="flex items-center justify-between pb-6 mb-4 border-b border-zinc-800/80 px-2 pt-1">
-            <Link href="/dashboard" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-sm transition-transform hover:scale-105">
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80 px-2 pt-1">
+            <Link href="/dashboard" className="flex items-center gap-2.5 group">
+              <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-sm transition-transform group-hover:scale-105">
                 <ConstLogoIcon size="sm" color="#000000" className="w-full h-full" />
               </div>
               <div>
@@ -159,10 +159,20 @@ export default function DashboardLayout({
           </nav>
         </div>
 
-        {/* User Profile Footer */}
-        <div className="pt-4 border-t border-zinc-800/80 mt-6 flex items-center justify-between px-2">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            {userProfile?.avatarUrl ? (
+        {/* User Profile & Logout Footer */}
+        <div className="pt-4 border-t border-zinc-800/80 mt-auto flex items-center justify-between px-2 bg-[#111113]">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {clerkIsSignedIn ? (
+              <UserButton
+                afterSignOutUrl="/sign-in"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8 rounded-full border border-zinc-700",
+                    userButtonPopoverCard: "bg-zinc-950 border border-zinc-800 shadow-2xl",
+                  },
+                }}
+              />
+            ) : userProfile?.avatarUrl ? (
               <img
                 src={userProfile.avatarUrl}
                 alt="Avatar"
@@ -180,7 +190,7 @@ export default function DashboardLayout({
                   : "CA"}
               </div>
             )}
-            <div className="truncate">
+            <div className="truncate flex-1 min-w-0">
               <p className="text-xs font-semibold text-white truncate">
                 {userProfile?.name || "Operator"}
               </p>
@@ -192,8 +202,9 @@ export default function DashboardLayout({
 
           <button
             onClick={handleLogout}
-            title="Sign out"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="Sign out / Log out"
+            aria-label="Sign out"
+            className="p-2 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 ml-1"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -201,7 +212,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* ================= MAIN DASHBOARD CONTENT ================= */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header */}
         <header className="h-14 border-b border-zinc-800/80 bg-[#111113]/50 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 text-xs text-zinc-400 font-medium">
@@ -210,15 +221,6 @@ export default function DashboardLayout({
             <span className="text-white capitalize">
               {pathname === "/dashboard" ? "Dashboard" : pathname.split("/").pop() || "Dashboard"}
             </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="text-xs text-zinc-400 hover:text-white transition-colors"
-            >
-              Public Landing Page ↗
-            </Link>
           </div>
         </header>
 

@@ -202,18 +202,40 @@ export const getOrCreateDefaultUser = mutation({
 });
 
 export const getUserConfig = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.optional(v.union(v.id("users"), v.string())) },
   handler: async (ctx, args) => {
+    let targetUserId: Id<"users"> | null = null;
+    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+      try {
+        const userDoc = await ctx.db.get(args.userId as Id<"users">);
+        if (userDoc) targetUserId = userDoc._id;
+      } catch {
+        // ignore
+      }
+    }
+    if (!targetUserId) {
+      const identity = await ctx.auth.getUserIdentity();
+      if (identity?.email) {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", identity.email))
+          .first();
+        if (user) targetUserId = user._id;
+      }
+    }
+    if (!targetUserId) {
+      return null;
+    }
     return await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
       .first();
   },
 });
 
 export const updateUserConfig = mutation({
   args: {
-    userId: v.id("users"),
+    userId: v.optional(v.union(v.id("users"), v.string())),
     activeModel: v.optional(v.string()),
     operatingMode: v.optional(
       v.union(
@@ -255,9 +277,30 @@ export const updateUserConfig = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    let targetUserId: Id<"users"> | null = null;
+    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+      try {
+        const userDoc = await ctx.db.get(args.userId as Id<"users">);
+        if (userDoc) targetUserId = userDoc._id;
+      } catch {
+        // ignore
+      }
+    }
+    if (!targetUserId) {
+      const identity = await ctx.auth.getUserIdentity();
+      if (identity?.email) {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", identity.email))
+          .first();
+        if (user) targetUserId = user._id;
+      }
+    }
+    if (!targetUserId) return null;
+
     const config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
       .first();
 
     if (!config) return null;

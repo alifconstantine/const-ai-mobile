@@ -49,7 +49,7 @@ export const TaskDrawer: React.FC = () => {
 
   const dbConversations = useQuery(
     api.conversations.listConversations,
-    currentUserId ? { userId: currentUserId as any } : "skip"
+    currentUserId ? { userId: currentUserId as any } : {}
   );
 
   useEffect(() => {

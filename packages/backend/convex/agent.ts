@@ -42,7 +42,7 @@ export interface SubmitToolResultResponse {
 
 export const sendMessage = action({
   args: {
-    userId: v.id("users"),
+    userId: v.optional(v.union(v.id("users"), v.string())),
     conversationId: v.id("conversations"),
     userMessage: v.string(),
     targetDeviceId: v.optional(v.id("devices")),
@@ -257,7 +257,7 @@ export const sendMessage = action({
  */
 export const submitToolResult = action({
   args: {
-    userId: v.id("users"),
+    userId: v.optional(v.union(v.id("users"), v.string())),
     conversationId: v.id("conversations"),
     assistantMessageId: v.id("messages"),
     toolCallId: v.string(),

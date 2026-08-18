@@ -2,13 +2,20 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 export const listMessages = query({
-  args: { conversationId: v.id("conversations") },
+  args: { conversationId: v.optional(v.union(v.id("conversations"), v.string())) },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId))
-      .order("asc")
-      .collect();
+    if (!args.conversationId || args.conversationId.startsWith("local_")) {
+      return [];
+    }
+    try {
+      return await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId as any))
+        .order("asc")
+        .collect();
+    } catch {
+      return [];
+    }
   },
 });
 

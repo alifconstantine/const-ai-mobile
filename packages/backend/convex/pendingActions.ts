@@ -17,7 +17,7 @@ export const listPendingByDevice = query({
 
 export const createPendingAction = mutation({
   args: {
-    userId: v.id("users"),
+    userId: v.optional(v.union(v.id("users"), v.string())),
     conversationId: v.id("conversations"),
     targetDeviceId: v.id("devices"),
     toolName: v.string(),
@@ -33,8 +33,40 @@ export const createPendingAction = mutation({
     diffContent: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    let targetUserId = null;
+    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+      try {
+        const user = await ctx.db.get(args.userId as any);
+        if (user) targetUserId = user._id;
+      } catch {
+        // ignore
+      }
+    }
+    if (!targetUserId) {
+      const identity = await ctx.auth.getUserIdentity();
+      if (identity?.email) {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", identity.email))
+          .first();
+        if (user) targetUserId = user._id;
+      }
+    }
+    if (!targetUserId) {
+      const defaultUser = await ctx.db.query("users").first();
+      targetUserId = defaultUser?._id;
+    }
+    if (!targetUserId) {
+      targetUserId = await ctx.db.insert("users", {
+        email: "operator@constai.platform",
+        name: "Operator",
+        subscriptionStatus: "active",
+        createdAt: Date.now(),
+      });
+    }
+
     return await ctx.db.insert("pendingActions", {
-      userId: args.userId,
+      userId: targetUserId,
       conversationId: args.conversationId,
       targetDeviceId: args.targetDeviceId,
       toolName: args.toolName,
