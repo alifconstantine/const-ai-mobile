@@ -86,12 +86,28 @@ export const sendMessage = action({
       userConfig?.customBaseUrl ||
       "http://localhost:20128/v1";
 
+    // Resolve API key by provider preference & environment variables
+    const envKey =
+      (typeof process !== "undefined" &&
+        (provider === "openrouter"
+          ? process.env.OPENROUTER_API_KEY
+          : provider === "gemini"
+          ? process.env.GEMINI_API_KEY
+          : provider === "anthropic"
+          ? process.env.ANTHROPIC_API_KEY
+          : process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY)) ||
+      "";
+
     const apiKey =
       args.customApiKeyOverride ||
-      userConfig?.customApiKeys?.openAi ||
-      userConfig?.customApiKeys?.openRouter ||
-      (typeof process !== "undefined" &&
-        (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY)) ||
+      (provider === "gemini"
+        ? userConfig?.customApiKeys?.gemini
+        : provider === "anthropic"
+        ? userConfig?.customApiKeys?.anthropic
+        : provider === "openrouter"
+        ? userConfig?.customApiKeys?.openRouter
+        : userConfig?.customApiKeys?.openAi || userConfig?.customApiKeys?.openRouter) ||
+      envKey ||
       "";
 
     // 3. Build System Prompt & Canonical Messages Array
