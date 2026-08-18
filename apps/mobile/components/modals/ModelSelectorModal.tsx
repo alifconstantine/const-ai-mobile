@@ -65,6 +65,7 @@ export const ModelSelectorModal: React.FC = () => {
     setModelSelectorModalOpen,
     activeModel,
     setActiveModel,
+    updateUserSettings,
   } = useNavigation();
 
   const [activeSubmenuModel, setActiveSubmenuModel] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export const ModelSelectorModal: React.FC = () => {
     const effort = selectedEffortMap[model.id] || model.effort;
     const displayName = effort ? `${model.name} ${effort}` : model.name;
     setActiveModel(displayName);
+    updateUserSettings({ activeModel: displayName });
     setModelSelectorModalOpen(false);
     setActiveSubmenuModel(null);
   };
@@ -88,7 +90,9 @@ export const ModelSelectorModal: React.FC = () => {
       ...prev,
       [model.id]: effort,
     }));
-    setActiveModel(`${model.name} ${effort}`);
+    const displayName = `${model.name} ${effort}`;
+    setActiveModel(displayName);
+    updateUserSettings({ activeModel: displayName });
     setModelSelectorModalOpen(false);
     setActiveSubmenuModel(null);
   };

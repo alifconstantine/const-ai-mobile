@@ -37,6 +37,7 @@ import { ModelSelectorModal } from "../components/modals/ModelSelectorModal";
 import { ContextWindowModal } from "../components/modals/ContextWindowModal";
 import { PlusActionMenu } from "../components/dock/PlusActionMenu";
 import { MentionContextModal } from "../components/dock/MentionContextModal";
+import { useRouter } from "expo-router";
 import { SlashCommandModal } from "../components/dock/SlashCommandModal";
 import { ChatMessageItem } from "../components/chat/ChatMessageItem";
 import { ThinkingIndicator } from "../components/chat/ThinkingIndicator";
@@ -44,11 +45,15 @@ import { useNavigation } from "../context/NavigationContext";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const [isSending, setIsSending] = useState(false);
 
   const {
     currentUserId,
+    currentUser,
+    isAuthenticated,
+    isAuthLoading,
     activeConversationId,
     activeModel,
     activeOperatingMode,
@@ -64,6 +69,13 @@ export default function HomeScreen() {
     customApiKey,
     customBaseUrl,
   } = useNavigation();
+
+  // Auth Guard
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isAuthLoading]);
 
   // Query live messages from Convex
   const messages = useQuery(

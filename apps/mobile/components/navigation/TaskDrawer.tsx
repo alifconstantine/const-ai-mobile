@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
+  Image,
 } from "react-native";
 import {
   Plus,
@@ -31,6 +32,7 @@ const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.82, 320);
 export const TaskDrawer: React.FC = () => {
   const {
     currentUserId,
+    currentUser,
     isTaskDrawerOpen,
     closeTaskDrawer,
     filterMode,
@@ -265,21 +267,42 @@ export const TaskDrawer: React.FC = () => {
 
         {/* User Profile & Device Status Footer */}
         <View style={styles.footer}>
-          <View style={styles.profileLeft}>
+          <TouchableOpacity
+            style={styles.profileLeft}
+            onPress={() => {
+              closeTaskDrawer();
+              setSettingsModalOpen(true);
+            }}
+            activeOpacity={0.8}
+          >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>AC</Text>
+              {currentUser?.avatarUrl ? (
+                <Image
+                  source={{ uri: currentUser.avatarUrl }}
+                  style={styles.avatarImg}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {currentUser?.initials ||
+                    (currentUser?.name
+                      ? currentUser.name.slice(0, 2).toUpperCase()
+                      : "AC")}
+                </Text>
+              )}
             </View>
 
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
-                Alif Constantine
+                {currentUser?.name || "Alif Constantine"}
               </Text>
               <View style={styles.deviceStatusRow}>
-                <Smartphone size={11} color="#22c55e" />
-                <Text style={styles.deviceStatusText}>Android • Online</Text>
+                <Smartphone size={10} color="#22c55e" />
+                <Text style={styles.deviceStatusText} numberOfLines={1}>
+                  @{currentUser?.username || "alif"} • Online
+                </Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.settingsBtn}
@@ -491,6 +514,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 9,
+    overflow: "hidden",
+  },
+  avatarImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   avatarText: {
     color: "#ffffff",

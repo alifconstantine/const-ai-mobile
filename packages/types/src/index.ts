@@ -376,4 +376,10 @@ export interface DeviceInfo {
   localModelDownloaded?: boolean;
   shizukuActive?: boolean;
   accessibilityActive?: boolean;
+  batteryLevel?: number;
+  isCharging?: boolean;
+  ramFreeMb?: number;
+  ramTotalMb?: number;
+  storageFreeGb?: number;
+  storageTotalGb?: number;
 }

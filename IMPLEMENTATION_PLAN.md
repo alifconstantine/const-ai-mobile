@@ -79,19 +79,30 @@ graph LR
 
 ---
 
-## 🌐 TAHAP 2: Web Dashboard Basic Functions & BYOK Vault (`apps/web`)
+## 🌐 TAHAP 2: Web Dashboard Basic Functions & BYOK Vault (`apps/web`) (Status: SELESAI ✅)
 
 ### 4.1. Halaman Login & Dev Profile (`apps/web/app/login/page.tsx`)
-- [ ] Form login email / magic link terhubung ke Convex.
-- [ ] Tombol 1-klik Quick Dev Login (*"Continue as Alif Constantine"*).
+- [x] Form login email & Clerk SSO terhubung realtime ke Convex.
+- [x] Custom Auth views: Sign-in, Sign-up, Continue, Forgot password, Reset password.
 
-### 4.2. Halaman Dashboard Utama (`apps/web/app/page.tsx`)
-- [ ] Ringkasan status perangkat (HP Android Online/Offline & Desktop Daemon).
-- [ ] Quick launcher untuk membuka chat session dan riwayat task.
+### 4.2. Halaman Dashboard & Logs Utama (`apps/web/app/dashboard/page.tsx`)
+- [x] **Tab 1: Dashboard (Overview & Telemetri)**:
+  - Top KPI Metric Cards (Total Sessions, Total Messages, Active Days, Current Streak 🔥, Favorite Model).
+  - Token In (TI) vs Token Out (TO) Breakdown dengan Filter Provider (All Providers / OmniRoute / Gemini / OpenRouter / Anthropic / OpenAI).
+  - Activity Heatmap 98-hari (GitHub-Style Calendar Grid interaktif).
+  - Daily Token Velocity & Message Turn Charts (Recharts).
+  - Passive Companion Device Telemetry (Baterai %, RAM Available, Storage Free, Shizuku, Spatial Accessibility — event-driven tanpa background drain).
+- [x] **Tab 2: Logs (OmniRoute-Inspired Trace Inspector)**:
+  - Search filter (Model, Provider, Prompt keyword, Request ID).
+  - Status filter pills (All, Success 200, Errors 4xx/5xx).
+  - Tabel log panggilan LLM (Status, Model, Provider, Tokens TI/TO, Duration ms, Timestamp).
+  - Modal Inspector detail untuk memeriksa prompt payload dan native tools yang dieksekusi.
 
-### 4.3. Halaman BYOK API Key Vault (`apps/web/app/settings/keys/page.tsx`)
-- [ ] Form input & enkripsi API Key kustom (OpenRouter, Gemini, Anthropic, OpenAI) tersimpan ke tabel `userConfigs`.
-- [ ] Indikator status keaktifan masing-masing API key.
+### 4.3. Halaman BYOK API Key Vault & Settings (`apps/web/app/dashboard/settings/page.tsx`)
+- [x] Form input & konfigurasi API Key kustom (OpenRouter, Gemini, Anthropic, OpenAI) tersimpan ke tabel `userConfigs`.
+- [x] Custom OpenAI-compatible / OmniRoute endpoint router (`http://localhost:20128/v1`).
+- [x] Live Probe API & Model Auto-discovery (`/v1/models`).
+- [x] Supertonic-3 Neural Voice Studio selector & 4-tier Safety Operating Modes.
 
 ### 4.4. Halaman Device Pairing & QR Sync (`apps/web/app/devices/page.tsx`)
 - [ ] Generator QR Code dinamis (`const://pair?token=...`) dan 6-digit PIN untuk menghubungkan HP ke Web.

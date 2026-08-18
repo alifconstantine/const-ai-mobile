@@ -105,7 +105,7 @@ export default function DashboardLayout({
 
   const navItems = [
     {
-      name: "Overview",
+      name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
       active: pathname === "/dashboard",
@@ -208,7 +208,7 @@ export default function DashboardLayout({
             <span>Control Center</span>
             <span>/</span>
             <span className="text-white capitalize">
-              {pathname.split("/").pop() || "Overview"}
+              {pathname === "/dashboard" ? "Dashboard" : pathname.split("/").pop() || "Dashboard"}
             </span>
           </div>
 

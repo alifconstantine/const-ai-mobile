@@ -140,6 +140,12 @@ export default defineSchema({
     localModelDownloaded: v.optional(v.boolean()),
     shizukuActive: v.optional(v.boolean()),
     accessibilityActive: v.optional(v.boolean()),
+    batteryLevel: v.optional(v.number()),
+    isCharging: v.optional(v.boolean()),
+    ramFreeMb: v.optional(v.number()),
+    ramTotalMb: v.optional(v.number()),
+    storageFreeGb: v.optional(v.number()),
+    storageTotalGb: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   devicePairings: defineTable({
