@@ -37,6 +37,8 @@ export default function AuthLayout({
       {/* Main Content Area */}
       <main className="w-full max-w-md z-10 my-auto py-2 shrink-0">
         {children}
+        {/* Persistent Clerk Smart CAPTCHA & Bot Protection Container */}
+        <div id="clerk-captcha" className="mt-2 flex justify-center empty:hidden" />
       </main>
 
       {/* Footer */}

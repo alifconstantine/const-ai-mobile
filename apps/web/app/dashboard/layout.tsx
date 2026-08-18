@@ -25,32 +25,12 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  let clerkUser: any = null;
-  let clerkIsLoaded = true;
-  let clerkIsSignedIn = false;
-  let clerkSignOut: any = null;
+  // Clerk Auth state
+  const { user: clerkUser, isLoaded: clerkIsLoaded, isSignedIn: clerkIsSignedIn } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
 
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const userRes = useUser();
-    clerkUser = userRes.user;
-    clerkIsLoaded = userRes.isLoaded;
-    clerkIsSignedIn = userRes.isSignedIn || false;
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const clerk = useClerk();
-    clerkSignOut = clerk.signOut;
-  } catch {
-    // In case Clerk Provider is booting or in test
-  }
-
-  // Live Convex Authenticated User Viewer Query
-  let liveViewer: any = undefined;
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    liveViewer = useQuery(api.users.viewer);
-  } catch {
-    // ignore
-  }
+  // Convex viewer query
+  const liveViewer = useQuery(api.users.viewer);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<{
