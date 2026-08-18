@@ -12,6 +12,9 @@ importers:
 
   .:
     devDependencies:
+      convex:
+        specifier: ^1.19.0
+        version: 1.44.0(@clerk/react@6.14.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@6.0.6)
       turbo:
         specifier: ^2.4.4
         version: 2.10.10
@@ -1357,7 +1360,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.22.28':
     resolution: {integrity: sha512-lvt72KNitGuixYD2l3SZmRKVu2G4zJpmg5V7WfUBNpmUU5oODBw/6qmiJ6kSLAlfDozscUk+BBGknBBzxUrwrA==}

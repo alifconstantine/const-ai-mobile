@@ -7,11 +7,14 @@
     "dev:web": "turbo dev --filter=@const-ai/web",
     "dev:mobile": "turbo dev --filter=@const-ai/mobile",
     "dev:backend": "turbo dev --filter=@const-ai/backend",
+    "convex:dev": "pnpm --filter @const-ai/backend dev",
+    "convex:login": "cd packages/backend && npx convex login",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
+    "convex": "^1.19.0",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2"
   },
