@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@const-ai/backend";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  KeyRound,
   Mic,
   Cpu,
   ShieldAlert,
@@ -24,30 +23,70 @@ import {
   Check,
   Save,
   Loader2,
-  RefreshCw,
   Eye,
   EyeOff,
   Zap,
   Server,
-  Sparkles,
   AlertCircle,
   CheckCircle2,
+  Plus,
+  Trash2,
+  X,
+  ChevronDown,
   ChevronRight,
-  Globe,
+  Download,
+  Play,
+  Search,
+  Filter,
+  CheckSquare,
+  Square,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 
-interface DiscoveredModelItem {
+export interface CustomModelItem {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+}
+
+export interface CustomProviderConfig {
   id: string;
   name: string;
-  provider: string;
-  contextLength?: number;
-  supportsTools: boolean;
+  baseUrl: string;
+  apiKey?: string;
+  apiFormat: "openai_completions" | "responses" | "anthropic_messages" | "gemini_native" | "ollama";
+  isActive: boolean;
+  models: CustomModelItem[];
 }
+
+const DEFAULT_BUILTIN_PROVIDERS = [
+  { id: "openrouter", name: "OpenRouter", desc: "200+ aggregated models" },
+  { id: "gemini", name: "Google Gemini", desc: "Fast OS & multimodal control" },
+  { id: "anthropic", name: "Anthropic Claude", desc: "Claude 3.7 Sonnet & Hybrid reasoning" },
+  { id: "openai", name: "OpenAI", desc: "GPT-4o & o3-mini" },
+];
+
+const INITIAL_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
+  {
+    id: "omniroute",
+    name: "OmniRoute",
+    baseUrl: "http://localhost:20128/v1",
+    apiKey: "sk-7852144cf1690e4d-297ffa-3396d47a",
+    apiFormat: "openai_completions",
+    isActive: true,
+    models: [
+      { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
+    ],
+  },
+];
 
 export default function SettingsHubPage() {
   const [activeTab, setActiveTab] = useState<
-    "byok" | "models" | "voice" | "operating_mode" | "devices"
-  >("byok");
+    "models_hub" | "persona" | "voice" | "operating_mode" | "devices"
+  >("models_hub");
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -55,31 +94,55 @@ export default function SettingsHubPage() {
   // Convex Queries & Mutations
   const liveViewer = useQuery(api.users.viewer);
   const updateUserConfigMutation = useMutation(api.users.updateUserConfig);
-  const detectModelsAction = useAction(api.agent.detectAvailableModels);
 
-  // Provider & Base URL State
-  const [provider, setProvider] = useState<
-    "custom_openai" | "openrouter" | "gemini" | "anthropic" | "openai"
-  >("custom_openai");
-  const [customBaseUrl, setCustomBaseUrl] = useState("");
+  // Providers & Active State
+  const [customProviders, setCustomProviders] = useState<CustomProviderConfig[]>(INITIAL_CUSTOM_PROVIDERS);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("omniroute");
+  const [isCreatingNewProvider, setIsCreatingNewProvider] = useState(false);
 
-  // API Keys State
+  // Editor Form State for the selected provider
+  const [editName, setEditName] = useState("OmniRoute");
+  const [editBaseUrl, setEditBaseUrl] = useState("http://localhost:20128/v1");
+  const [editApiKey, setEditApiKey] = useState("sk-7852144cf1690e4d-297ffa-3396d47a");
+  const [editApiFormat, setEditApiFormat] = useState<CustomProviderConfig["apiFormat"]>("openai_completions");
+  const [editModels, setEditModels] = useState<CustomModelItem[]>([
+    { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
+  ]);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+
+  // Built-in API keys
   const [geminiKey, setGeminiKey] = useState("");
   const [claudeKey, setClaudeKey] = useState("");
   const [openAiKey, setOpenAiKey] = useState("");
   const [openRouterKey, setOpenRouterKey] = useState("");
-  const [customApiKey, setCustomApiKey] = useState("");
-  const [showKeys, setShowKeys] = useState(false);
 
-  // Dynamic Model Fetching State
+  // 1. Single "Add Model" Modal (Image 1 match)
+  const [isAddModelModalOpen, setIsAddModelModalOpen] = useState(false);
+  const [modalModelId, setModalModelId] = useState("");
+  const [modalContextWindow, setModalContextWindow] = useState("200000");
+  const [modalMaxOutputTokens, setModalMaxOutputTokens] = useState("");
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // 2. Discovered Models Import Picker Modal (For clean bulk management)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [discoveredCandidates, setDiscoveredCandidates] = useState<Array<{ id: string; name: string; contextLength?: number }>>([]);
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
+  const [importSearchQuery, setImportSearchQuery] = useState("");
+  const [importCategoryFilter, setImportCategoryFilter] = useState<string>("all");
+
+  // Model Testing / Ping State (Per Model)
+  const [testingModelId, setTestingModelId] = useState<string | null>(null);
+  const [modelTestResults, setModelTestResults] = useState<
+    Record<string, { success: boolean; latencyMs?: number; reply?: string; error?: string }>
+  >({});
+
+  // Fetch /models endpoint state
   const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const [fetchStatus, setFetchStatus] = useState<{
-    type: "idle" | "success" | "error";
+  const [fetchNotification, setFetchNotification] = useState<{
+    type: "idle" | "success" | "error" | "info";
     message: string;
-    count?: number;
   }>({ type: "idle", message: "" });
-  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModelItem[]>([]);
-  const [modelSearchQuery, setModelSearchQuery] = useState("");
 
   // Active Model & Persona State
   const [activeModel, setActiveModel] = useState("Const");
@@ -89,9 +152,7 @@ export default function SettingsHubPage() {
   );
 
   // Voice Settings State
-  const [ttsEngine, setTtsEngine] = useState<"local_supertonic" | "cloud_fallback">(
-    "local_supertonic"
-  );
+  const [ttsEngine, setTtsEngine] = useState<"local_supertonic" | "cloud_fallback">("local_supertonic");
   const [selectedVoice, setSelectedVoice] = useState("M1");
   const [speakingRate, setSpeakingRate] = useState([1.0]);
   const [enableEmotionTags, setEnableEmotionTags] = useState(true);
@@ -106,8 +167,6 @@ export default function SettingsHubPage() {
   useEffect(() => {
     if (liveViewer?.config) {
       const cfg = liveViewer.config;
-      if (cfg.provider) setProvider(cfg.provider as any);
-      if (cfg.customBaseUrl) setCustomBaseUrl(cfg.customBaseUrl);
       if (cfg.activeModel) setActiveModel(cfg.activeModel);
       if (cfg.operatingMode) setOperatingMode(cfg.operatingMode);
       if (cfg.temperature !== undefined) setTemperature([cfg.temperature]);
@@ -116,11 +175,29 @@ export default function SettingsHubPage() {
       if (cfg.customApiKeys) {
         if (cfg.customApiKeys.gemini) setGeminiKey(cfg.customApiKeys.gemini);
         if (cfg.customApiKeys.anthropic) setClaudeKey(cfg.customApiKeys.anthropic);
-        if (cfg.customApiKeys.openAi) {
-          setOpenAiKey(cfg.customApiKeys.openAi);
-          setCustomApiKey(cfg.customApiKeys.openAi);
-        }
+        if (cfg.customApiKeys.openAi) setOpenAiKey(cfg.customApiKeys.openAi);
         if (cfg.customApiKeys.openRouter) setOpenRouterKey(cfg.customApiKeys.openRouter);
+      }
+
+      if (cfg.customProviders && cfg.customProviders.length > 0) {
+        const filtered = cfg.customProviders.filter((p: any) => p.id !== "zai" && p.name !== "Z.ai");
+        if (filtered.length > 0) {
+          setCustomProviders(filtered as any);
+          const activeProv = filtered.find((p: any) => p.isActive) || filtered[0];
+          if (activeProv) {
+            setSelectedProviderId(activeProv.id);
+            setEditName(activeProv.name);
+            setEditBaseUrl(activeProv.baseUrl);
+            setEditApiKey(activeProv.apiKey || "");
+            setEditApiFormat((activeProv.apiFormat as any) || "openai_completions");
+            setEditModels(activeProv.models || [{ id: "Const", name: "Const", contextWindow: 200000 }]);
+          }
+        }
+      } else if (cfg.customBaseUrl) {
+        setEditBaseUrl(cfg.customBaseUrl);
+        if (cfg.customApiKeys?.openAi) {
+          setEditApiKey(cfg.customApiKeys.openAi);
+        }
       }
 
       if (cfg.voiceSettings) {
@@ -133,59 +210,321 @@ export default function SettingsHubPage() {
     }
   }, [liveViewer]);
 
-  // Test Connection & Fetch Models from Provider
-  const handleTestAndFetchModels = async () => {
-    setIsFetchingModels(true);
-    setFetchStatus({ type: "idle", message: "" });
+  // Handle Selecting a Provider
+  const handleSelectProvider = (provId: string) => {
+    setIsCreatingNewProvider(false);
+    setSelectedProviderId(provId);
+    setFetchNotification({ type: "idle", message: "" });
+    setModelTestResults({});
+    setModelSearchQuery("");
 
+    const found = customProviders.find((p) => p.id === provId);
+    if (found) {
+      setEditName(found.name);
+      setEditBaseUrl(found.baseUrl);
+      setEditApiKey(found.apiKey || "");
+      setEditApiFormat(found.apiFormat || "openai_completions");
+      setEditModels(found.models || []);
+    } else {
+      // Built-in provider
+      const builtin = DEFAULT_BUILTIN_PROVIDERS.find((p) => p.id === provId);
+      if (builtin) {
+        setEditName(builtin.name);
+        setEditBaseUrl(
+          provId === "openrouter"
+            ? "https://openrouter.ai/api/v1"
+            : provId === "gemini"
+            ? "https://generativelanguage.googleapis.com/v1beta/openai"
+            : provId === "anthropic"
+            ? "https://api.anthropic.com/v1"
+            : "https://api.openai.com/v1"
+        );
+        setEditApiKey(
+          provId === "gemini"
+            ? geminiKey
+            : provId === "anthropic"
+            ? claudeKey
+            : provId === "openrouter"
+            ? openRouterKey
+            : openAiKey
+        );
+        setEditApiFormat("openai_completions");
+        setEditModels([
+          {
+            id:
+              provId === "gemini"
+                ? "google/gemini-2.0-flash-001"
+                : provId === "anthropic"
+                ? "claude-3-7-sonnet"
+                : provId === "openrouter"
+                ? "anthropic/claude-3.7-sonnet"
+                : "gpt-4o",
+            name: builtin.name,
+            contextWindow: 200000,
+          },
+        ]);
+      }
+    }
+  };
+
+  // Start Adding a New Custom Provider
+  const handleStartAddProvider = () => {
+    setIsCreatingNewProvider(true);
+    setSelectedProviderId("new_custom");
+    setEditName("Custom Provider");
+    setEditBaseUrl("http://localhost:20128/v1");
+    setEditApiKey("");
+    setEditApiFormat("openai_completions");
+    setEditModels([{ id: "Const", name: "Const", contextWindow: 200000, supportsTools: true }]);
+    setFetchNotification({ type: "idle", message: "" });
+    setModelTestResults({});
+  };
+
+  // Open "Add Model" Modal (Image 1)
+  const handleOpenAddModelModal = () => {
+    setModalModelId("");
+    setModalContextWindow("200000");
+    setModalMaxOutputTokens("");
+    setIsAdvancedOpen(false);
+    setIsAddModelModalOpen(true);
+  };
+
+  // Save Model from Image 1 Modal
+  const handleSaveModalModel = () => {
+    const rawId = modalModelId.trim();
+    if (!rawId) return;
+
+    if (!editModels.some((m) => m.id === rawId)) {
+      const parsedCtx = parseInt(modalContextWindow, 10) || 200000;
+      const parsedMax = modalMaxOutputTokens ? parseInt(modalMaxOutputTokens, 10) : undefined;
+      setEditModels([
+        ...editModels,
+        {
+          id: rawId,
+          name: rawId,
+          contextWindow: parsedCtx,
+          maxOutputTokens: parsedMax,
+          supportsTools: true,
+        },
+      ]);
+    }
+    setIsAddModelModalOpen(false);
+  };
+
+  // Remove Model from List
+  const handleRemoveModel = (modelId: string) => {
+    setEditModels(editModels.filter((m) => m.id !== modelId));
+  };
+
+  // Clear all models except active
+  const handleClearNonActiveModels = () => {
+    setEditModels(editModels.filter((m) => m.id === activeModel || m.id === "Const"));
+  };
+
+  // Test / Ping a specific Model
+  const handleTestSpecificModel = async (modelId: string) => {
+    setTestingModelId(modelId);
     try {
-      const currentApiKey =
-        provider === "custom_openai"
-          ? customApiKey || openAiKey || openRouterKey
-          : provider === "gemini"
-          ? geminiKey
-          : provider === "anthropic"
-          ? claudeKey
-          : provider === "openrouter"
-          ? openRouterKey
-          : openAiKey;
-
-      const models = await detectModelsAction({
-        provider,
-        apiKey: currentApiKey,
-        customBaseUrl: provider === "custom_openai" ? customBaseUrl : undefined,
+      const res = await fetch("/api/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "test_model",
+          baseUrl: editBaseUrl,
+          apiKey: editApiKey,
+          apiFormat: editApiFormat,
+          model: modelId,
+        }),
       });
 
-      if (models && models.length > 0) {
-        setDiscoveredModels(models);
-        setFetchStatus({
-          type: "success",
-          message: `Connected successfully! Found ${models.length} available models.`,
-          count: models.length,
-        });
+      const data = await res.json();
+      setModelTestResults((prev) => ({
+        ...prev,
+        [modelId]: data,
+      }));
+    } catch (err: any) {
+      setModelTestResults((prev) => ({
+        ...prev,
+        [modelId]: {
+          success: false,
+          error: err?.message || "Failed to connect to local probe route.",
+        },
+      }));
+    } finally {
+      setTestingModelId(null);
+    }
+  };
 
-        // If current activeModel is not in list, pick the first one or keep Const
-        if (!models.some((m) => m.id === activeModel) && models.length > 0 && activeModel === "Const") {
-          setActiveModel(models[0].id);
-        }
+  // Fetch Models from Endpoint and open the selection modal
+  const handleFetchModelsFromEndpoint = async () => {
+    setIsFetchingModels(true);
+    setFetchNotification({ type: "idle", message: "" });
+
+    try {
+      const res = await fetch("/api/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "fetch_models",
+          baseUrl: editBaseUrl,
+          apiKey: editApiKey,
+          apiFormat: editApiFormat,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.models && data.models.length > 0) {
+        setDiscoveredCandidates(data.models);
+        // Pre-select models that are already in editModels
+        const existing = new Set(editModels.map((m) => m.id));
+        setSelectedCandidates(existing);
+        setIsImportModalOpen(true);
       } else {
-        setFetchStatus({
-          type: "error",
-          message: "No models returned from endpoint. Please check Base URL and API Key.",
+        setFetchNotification({
+          type: data.success ? "info" : "error",
+          message:
+            data.error ||
+            "Endpoint is online, but did not expose a /models catalog. You can add your model directly via '+ Add model'.",
         });
       }
     } catch (err: any) {
-      setFetchStatus({
+      setFetchNotification({
         type: "error",
-        message: err?.message || "Failed to reach endpoint. Verify your URL and network connectivity.",
+        message: err?.message || "Failed to reach endpoint probe route.",
       });
     } finally {
       setIsFetchingModels(false);
     }
   };
 
-  // Save Settings to Convex DB
-  const handleSaveSettings = async () => {
+  // Confirm import from the Discovered Models Modal
+  const handleConfirmImport = () => {
+    const byId = new Map(editModels.map((m) => [m.id, m]));
+    for (const c of discoveredCandidates) {
+      if (selectedCandidates.has(c.id)) {
+        if (!byId.has(c.id)) {
+          byId.set(c.id, {
+            id: c.id,
+            name: c.name || c.id,
+            contextWindow: c.contextLength || 200000,
+            supportsTools: true,
+          });
+        }
+      }
+    }
+    setEditModels(Array.from(byId.values()));
+    setIsImportModalOpen(false);
+    setFetchNotification({
+      type: "success",
+      message: `Successfully imported ${selectedCandidates.size} selected model(s)!`,
+    });
+  };
+
+  // Filtered models for the current view
+  const filteredModels = useMemo(() => {
+    const q = modelSearchQuery.toLowerCase().trim();
+    if (!q) return editModels;
+    return editModels.filter(
+      (m) => m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q))
+    );
+  }, [editModels, modelSearchQuery]);
+
+  // Filtered candidates in the import modal
+  const filteredCandidates = useMemo(() => {
+    let list = discoveredCandidates;
+    if (importCategoryFilter !== "all") {
+      list = list.filter((c) => c.id.toLowerCase().includes(importCategoryFilter));
+    }
+    const q = importSearchQuery.toLowerCase().trim();
+    if (q) {
+      list = list.filter((c) => c.id.toLowerCase().includes(q) || (c.name && c.name.toLowerCase().includes(q)));
+    }
+    return list;
+  }, [discoveredCandidates, importSearchQuery, importCategoryFilter]);
+
+  // Save / Update Current Provider
+  const handleSaveCurrentProvider = async () => {
+    let updatedList: CustomProviderConfig[];
+
+    if (isCreatingNewProvider) {
+      const newId = editName.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now();
+      const newProv: CustomProviderConfig = {
+        id: newId,
+        name: editName,
+        baseUrl: editBaseUrl,
+        apiKey: editApiKey,
+        apiFormat: editApiFormat,
+        isActive: true,
+        models: editModels.length > 0 ? editModels : [{ id: "Const", name: "Const", contextWindow: 200000 }],
+      };
+      updatedList = [...customProviders, newProv];
+      setSelectedProviderId(newId);
+      setIsCreatingNewProvider(false);
+    } else {
+      updatedList = customProviders.map((p) => {
+        if (p.id === selectedProviderId) {
+          return {
+            ...p,
+            name: editName,
+            baseUrl: editBaseUrl,
+            apiKey: editApiKey,
+            apiFormat: editApiFormat,
+            models: editModels,
+          };
+        }
+        return p;
+      });
+    }
+
+    setCustomProviders(updatedList);
+
+    if (liveViewer?._id) {
+      setIsSaving(true);
+      try {
+        await updateUserConfigMutation({
+          userId: liveViewer._id,
+          activeModel: editModels[0]?.id || activeModel,
+          customBaseUrl: editBaseUrl,
+          provider: "custom_openai",
+          customProviders: updatedList as any,
+          customApiKeys: {
+            gemini: geminiKey,
+            anthropic: claudeKey,
+            openAi: editApiKey,
+            openRouter: openRouterKey,
+          },
+        });
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+      } catch (err) {
+        console.error("Failed to save provider:", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  // Delete Custom Provider
+  const handleDeleteProvider = async (id: string) => {
+    const updated = customProviders.filter((p) => p.id !== id);
+    setCustomProviders(updated);
+    if (updated.length > 0) {
+      handleSelectProvider(updated[0].id);
+    } else {
+      handleSelectProvider("openrouter");
+    }
+
+    if (liveViewer?._id) {
+      await updateUserConfigMutation({
+        userId: liveViewer._id,
+        customProviders: updated as any,
+      });
+    }
+  };
+
+  // Master Save All Settings
+  const handleSaveAllSettings = async () => {
     if (!liveViewer?._id) return;
     setIsSaving(true);
     setSavedSuccess(false);
@@ -195,12 +534,13 @@ export default function SettingsHubPage() {
         userId: liveViewer._id,
         activeModel,
         operatingMode,
-        provider,
-        customBaseUrl,
+        provider: "custom_openai",
+        customBaseUrl: editBaseUrl,
+        customProviders: customProviders as any,
         customApiKeys: {
           gemini: geminiKey,
           anthropic: claudeKey,
-          openAi: provider === "custom_openai" ? customApiKey || openAiKey : openAiKey,
+          openAi: editApiKey || openAiKey,
           openRouter: openRouterKey,
         },
       });
@@ -214,28 +554,23 @@ export default function SettingsHubPage() {
     }
   };
 
-  const filteredDiscoveredModels = discoveredModels.filter((m) =>
-    m.id.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
-    m.name.toLowerCase().includes(modelSearchQuery.toLowerCase())
-  );
-
   return (
-    <div className="space-y-6 max-w-5xl select-none">
+    <div className="space-y-6 max-w-6xl select-none">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-800 pb-5">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-800/80 pb-5">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Settings & Intelligence Configuration
+            Model settings
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
-            Configure Base URL, API Keys, Model Discovery, and Mobile Device Synchronization.
+            Manage custom model providers. Once configured, they can be selected during chat.
           </p>
         </div>
 
         <Button
-          onClick={handleSaveSettings}
+          onClick={handleSaveAllSettings}
           disabled={isSaving || !liveViewer?._id}
-          className="bg-white hover:bg-zinc-200 text-black font-semibold rounded-full px-5 text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-lg"
+          className="bg-white hover:bg-zinc-200 text-black font-semibold rounded-full px-5 text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-lg transition-all"
         >
           {isSaving ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -244,15 +579,15 @@ export default function SettingsHubPage() {
           ) : (
             <Save className="w-4 h-4" />
           )}
-          <span>{savedSuccess ? "Synced to Convex & Mobile!" : "Save & Sync Settings"}</span>
+          <span>{savedSuccess ? "Saved & Synced!" : "Save & Sync Settings"}</span>
         </Button>
       </div>
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-zinc-800/80">
         {[
-          { key: "byok", label: "Base URL & Model Config", icon: Server },
-          { key: "models", label: "Intelligence & Persona", icon: Cpu },
+          { key: "models_hub", label: "Model settings", icon: Server },
+          { key: "persona", label: "Intelligence & Persona", icon: Cpu },
           { key: "voice", label: "Neural Voice (Supertonic-3)", icon: Mic },
           { key: "operating_mode", label: "Safety & Operating Modes", icon: ShieldAlert },
           { key: "devices", label: "Linked Devices", icon: Smartphone },
@@ -273,271 +608,702 @@ export default function SettingsHubPage() {
         ))}
       </div>
 
-      {/* ================= TAB 1: BASE URL & MODEL CONFIGURATION ================= */}
-      {activeTab === "byok" && (
-        <div className="space-y-5">
-          {/* Card 1: Provider & Endpoint Setup */}
-          <Card className="bg-[#121214] border-zinc-800 text-white">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Server className="w-4 h-4 text-indigo-400" />
-                    <span>LLM Provider & Endpoint Setup</span>
-                  </CardTitle>
-                  <CardDescription className="text-xs text-zinc-400 mt-1">
-                    Connect your self-hosted LLM (vLLM, LiteLLM, Ollama), OpenRouter, or Official APIs.
-                  </CardDescription>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowKeys(!showKeys)}
-                  className="text-xs text-zinc-400 hover:text-white flex items-center gap-1.5 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
-                >
-                  {showKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  <span>{showKeys ? "Hide Keys" : "Reveal Keys"}</span>
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Provider Selector Cards */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-zinc-300 font-medium">Inference Provider</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {[
-                    { id: "custom_openai", label: "Custom / Self-Hosted", desc: "vLLM / LiteLLM / Ollama" },
-                    { id: "openrouter", label: "OpenRouter", desc: "200+ aggregated models" },
-                    { id: "gemini", label: "Google Gemini", desc: "Fast OS control" },
-                    { id: "anthropic", label: "Anthropic Claude", desc: "Claude 3.7 Sonnet" },
-                    { id: "openai", label: "OpenAI", desc: "GPT-4o & o3-mini" },
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setProvider(p.id as any)}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        provider === p.id
-                          ? "bg-zinc-800 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/40"
-                          : "bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+      {/* ================= TAB 1: MODEL SETTINGS ================= */}
+      {activeTab === "models_hub" && (
+        <div className="flex flex-col md:flex-row gap-5 items-start">
+          {/* Left Sidebar: Providers & Custom Providers List */}
+          <div className="w-full md:w-64 shrink-0 bg-[#121214] border border-zinc-800/80 rounded-2xl p-3.5 space-y-4">
+            {/* Built-in Providers */}
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider px-2 pb-1">
+                Providers
+              </p>
+              {DEFAULT_BUILTIN_PROVIDERS.map((p) => {
+                const isSelected = !isCreatingNewProvider && selectedProviderId === p.id;
+                const isConfigured =
+                  (p.id === "gemini" && Boolean(geminiKey)) ||
+                  (p.id === "anthropic" && Boolean(claudeKey)) ||
+                  (p.id === "openrouter" && Boolean(openRouterKey)) ||
+                  (p.id === "openai" && Boolean(openAiKey));
+
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelectProvider(p.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-zinc-800 text-white font-medium"
+                        : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="truncate">{p.name}</span>
+                    </div>
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        isConfigured ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-zinc-600"
                       }`}
-                    >
-                      <p className="text-xs font-semibold text-white">{p.label}</p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-1">{p.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Base URL (Crucial for Custom / Self-Hosted) */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs text-zinc-300 font-medium">
-                    Base URL {provider === "custom_openai" && <span className="text-indigo-400">*</span>}
-                  </Label>
-                  <span className="text-[10px] text-zinc-500 font-mono">
-                    Auto-normalizes to /v1/chat/completions & /models
-                  </span>
-                </div>
-                <div className="relative">
-                  <Globe className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    type="text"
-                    placeholder={
-                      provider === "custom_openai"
-                        ? "https://your-llm-server.com/v1 or http://localhost:11434/v1"
-                        : "https://openrouter.ai/api/v1 (Optional override)"
-                    }
-                    value={customBaseUrl}
-                    onChange={(e) => setCustomBaseUrl(e.target.value)}
-                    className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs pl-9 focus-visible:ring-indigo-400"
-                  />
-                </div>
-              </div>
-
-              {/* API Key Input based on provider */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-zinc-300 font-medium">
-                  {provider === "custom_openai"
-                    ? "API Key (Optional for local servers like Ollama / LM Studio)"
-                    : `${provider.toUpperCase()} API Key`}
-                </Label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    type={showKeys ? "text" : "password"}
-                    placeholder={
-                      provider === "custom_openai"
-                        ? "Bearer key (or leave empty if local)"
-                        : provider === "gemini"
-                        ? "AIzaSy..."
-                        : provider === "anthropic"
-                        ? "sk-ant-api03-..."
-                        : provider === "openrouter"
-                        ? "sk-or-v1-..."
-                        : "sk-proj-..."
-                    }
-                    value={
-                      provider === "custom_openai"
-                        ? customApiKey
-                        : provider === "gemini"
-                        ? geminiKey
-                        : provider === "anthropic"
-                        ? claudeKey
-                        : provider === "openrouter"
-                        ? openRouterKey
-                        : openAiKey
-                    }
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (provider === "custom_openai") setCustomApiKey(val);
-                      else if (provider === "gemini") setGeminiKey(val);
-                      else if (provider === "anthropic") setClaudeKey(val);
-                      else if (provider === "openrouter") setOpenRouterKey(val);
-                      else setOpenAiKey(val);
-                    }}
-                    className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs pl-9 focus-visible:ring-indigo-400"
-                  />
-                </div>
-              </div>
-
-              {/* Action Button: Test & Fetch Models */}
-              <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={handleTestAndFetchModels}
-                  disabled={isFetchingModels}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl px-4 py-2 cursor-pointer flex items-center gap-2 transition-all shadow-md hover:shadow-indigo-500/20"
-                >
-                  {isFetchingModels ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Zap className="w-3.5 h-3.5 text-yellow-300" />
-                  )}
-                  <span>{isFetchingModels ? "Querying /models..." : "⚡ Test Connection & Fetch Models"}</span>
-                </Button>
-
-                {fetchStatus.type === "success" && (
-                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium bg-emerald-950/50 border border-emerald-800/40 px-3 py-1.5 rounded-xl">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{fetchStatus.message}</span>
-                  </div>
-                )}
-
-                {fetchStatus.type === "error" && (
-                  <div className="flex items-center gap-2 text-red-400 text-xs font-medium bg-red-950/50 border border-red-800/40 px-3 py-1.5 rounded-xl">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{fetchStatus.message}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: Model Picker & Selection */}
-          <Card className="bg-[#121214] border-zinc-800 text-white">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-emerald-400" />
-                    <span>Active Model Selection</span>
-                  </CardTitle>
-                  <CardDescription className="text-xs text-zinc-400 mt-1">
-                    Select the model that will power your Mobile Agent reasoning and Device Tools.
-                  </CardDescription>
-                </div>
-                <div className="px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-[11px] font-mono text-zinc-300">
-                  Current: <span className="text-emerald-400 font-semibold">{activeModel}</span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* If models discovered, show searchable list */}
-              {discoveredModels.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Input
-                      type="text"
-                      placeholder="Search fetched models (e.g. qwen, deepseek, sonnet)..."
-                      value={modelSearchQuery}
-                      onChange={(e) => setModelSearchQuery(e.target.value)}
-                      className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 text-xs focus-visible:ring-emerald-400"
                     />
-                    <span className="text-[11px] text-zinc-500 whitespace-nowrap font-mono">
-                      {filteredDiscoveredModels.length} models
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Providers */}
+            <div className="space-y-1 pt-2 border-t border-zinc-800/60">
+              <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider px-2 pb-1">
+                Custom providers
+              </p>
+              {customProviders.map((p) => {
+                const isSelected = !isCreatingNewProvider && selectedProviderId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelectProvider(p.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-zinc-800 text-white font-medium"
+                        : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Server className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="truncate">{p.name}</span>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] shrink-0" />
+                  </button>
+                );
+              })}
+
+              {/* Add Provider Button */}
+              <button
+                type="button"
+                onClick={handleStartAddProvider}
+                className={`w-full flex items-center gap-2 px-3 py-2 mt-2 rounded-xl text-xs text-left transition-all cursor-pointer border border-dashed ${
+                  isCreatingNewProvider
+                    ? "bg-zinc-800 border-zinc-600 text-white font-medium"
+                    : "border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 hover:bg-zinc-900/50"
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Add provider</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Right Editor Panel */}
+          <div className="flex-1 w-full bg-[#121214] border border-zinc-800/80 rounded-2xl p-5 space-y-5">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <h2 className="text-base font-bold text-white">
+                  {isCreatingNewProvider
+                    ? "Add model provider"
+                    : `Edit model provider: ${editName}`}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Configure custom API endpoints, keys, and active models.
+                </p>
+              </div>
+
+              {/* Active Model Indicator */}
+              <div className="px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400 flex items-center gap-1.5 shadow-xs">
+                <span>Active Model:</span>
+                <span className="text-emerald-400 font-semibold">{activeModel}</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Field 1: Name */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300 font-medium">Name</Label>
+                <Input
+                  type="text"
+                  placeholder="e.g. DeepSeek, OmniRoute, or Const"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+                />
+              </div>
+
+              {/* Field 2: Base URL */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300 font-medium">Base URL</Label>
+                <Input
+                  type="text"
+                  placeholder="https://api.example.com/v1"
+                  value={editBaseUrl}
+                  onChange={(e) => setEditBaseUrl(e.target.value)}
+                  className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+                />
+              </div>
+
+              {/* Field 3: API Key */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300 font-medium">API key</Label>
+                <div className="relative">
+                  <Input
+                    type={showApiKey ? "text" : "password"}
+                    placeholder="Enter API key"
+                    value={editApiKey}
+                    onChange={(e) => setEditApiKey(e.target.value)}
+                    className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs pr-10 focus-visible:ring-1 focus-visible:ring-zinc-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                  >
+                    {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Field 4: API Format */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300 font-medium">API format</Label>
+                <select
+                  value={editApiFormat}
+                  onChange={(e) => setEditApiFormat(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-zinc-400 cursor-pointer font-sans"
+                >
+                  <option value="openai_completions">OpenAI compatible (/v1/chat/completions)</option>
+                  <option value="responses">Responses (/responses)</option>
+                  <option value="anthropic_messages">Anthropic (/v1/messages)</option>
+                  <option value="gemini_native">Google Gemini native (/models)</option>
+                  <option value="ollama">Ollama (/api/chat)</option>
+                </select>
+              </div>
+
+              {/* ================= REFINED COMPACT MODEL LIST SECTION ================= */}
+              <div className="space-y-2.5 pt-2">
+                {/* Header with Title, Count, Search & Actions */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-zinc-300 font-medium">Configured models</Label>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60">
+                      {editModels.length} {editModels.length === 1 ? "model" : "models"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
-                    {filteredDiscoveredModels.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setActiveModel(m.id)}
-                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                          activeModel === m.id
-                            ? "bg-zinc-800 border-emerald-400 text-white shadow-sm ring-1 ring-emerald-400/40"
-                            : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-700 hover:text-white"
-                        }`}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <p className="text-xs font-semibold text-white truncate">{m.name || m.id}</p>
-                          <p className="text-[10px] text-zinc-500 font-mono truncate">{m.id}</p>
-                        </div>
-                        {activeModel === m.id && (
-                          <div className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center shrink-0">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    {/* Fetch Models / Open Catalog Picker */}
+                    <Button
+                      type="button"
+                      onClick={handleFetchModelsFromEndpoint}
+                      disabled={isFetchingModels || !editBaseUrl}
+                      variant="outline"
+                      className="text-[11px] h-7 px-2.5 rounded-lg border-zinc-700 bg-zinc-800/80 text-indigo-300 hover:text-white hover:bg-zinc-700 cursor-pointer flex items-center gap-1.5"
+                    >
+                      {isFetchingModels ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Download className="w-3 h-3 text-indigo-400" />
+                      )}
+                      <span>{isFetchingModels ? "Scanning..." : "Fetch & Pick Models"}</span>
+                    </Button>
+
+                    {/* + Add Single Model (Image 1 Modal) */}
+                    <Button
+                      type="button"
+                      onClick={handleOpenAddModelModal}
+                      className="bg-white hover:bg-zinc-200 text-black text-[11px] font-medium h-7 px-3 rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add model</span>
+                    </Button>
                   </div>
                 </div>
-              ) : (
-                /* Fallback Manual Model Input & Presets */
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-300">Model Identifier / Tag</Label>
+
+                {/* Search / Filter Bar & Quick Actions when models > 3 */}
+                {editModels.length > 3 && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3 h-3 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <Input
+                        type="text"
+                        placeholder="Search configured models..."
+                        value={modelSearchQuery}
+                        onChange={(e) => setModelSearchQuery(e.target.value)}
+                        className="bg-zinc-900/60 border-zinc-800 text-white placeholder:text-zinc-600 text-[11px] pl-8 h-7.5 rounded-lg focus-visible:ring-1 focus-visible:ring-zinc-500"
+                      />
+                      {modelSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setModelSearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {editModels.length > 5 && (
+                      <Button
+                        type="button"
+                        onClick={handleClearNonActiveModels}
+                        variant="ghost"
+                        className="text-[10px] text-zinc-500 hover:text-red-400 h-7.5 px-2 cursor-pointer"
+                        title="Remove all models except active and Const"
+                      >
+                        Keep Active Only
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* Fetch Status Notification */}
+                {fetchNotification.type !== "idle" && (
+                  <div
+                    className={`p-2.5 rounded-xl text-xs flex items-center justify-between gap-2 ${
+                      fetchNotification.type === "success"
+                        ? "bg-emerald-950/40 border border-emerald-800/40 text-emerald-300"
+                        : fetchNotification.type === "error"
+                        ? "bg-red-950/40 border border-red-800/40 text-red-300"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {fetchNotification.type === "success" ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : fetchNotification.type === "error" ? (
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      ) : (
+                        <Zap className="w-4 h-4 text-yellow-400 shrink-0" />
+                      )}
+                      <span className="truncate">{fetchNotification.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFetchNotification({ type: "idle", message: "" })}
+                      className="text-zinc-500 hover:text-white shrink-0 ml-2"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Bounded Scrollable Container for Configured Models (Clean & Compact) */}
+                <div className="max-h-[320px] overflow-y-auto pr-1 space-y-1.5 rounded-xl border border-zinc-800/60 bg-zinc-950/40 p-1.5 scrollbar-thin scrollbar-thumb-zinc-800">
+                  {filteredModels.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-zinc-500">
+                      {modelSearchQuery ? `No models matching "${modelSearchQuery}"` : "No models configured yet. Click 'Add model' or 'Fetch & Pick Models'."}
+                    </div>
+                  ) : (
+                    filteredModels.map((m) => {
+                      const isSystemActive = activeModel === m.id;
+                      const testResult = modelTestResults[m.id];
+                      const isTesting = testingModelId === m.id;
+
+                      return (
+                        <div key={m.id} className="space-y-1">
+                          <div
+                            className={`flex items-center justify-between p-2 rounded-lg transition-all border ${
+                              isSystemActive
+                                ? "bg-zinc-900/90 border-emerald-500/30 shadow-xs"
+                                : "bg-zinc-900/50 border-zinc-800/80 hover:border-zinc-700/80"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {/* Active Selector */}
+                              <button
+                                type="button"
+                                onClick={() => setActiveModel(m.id)}
+                                title="Set as active system model"
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 cursor-pointer transition-all ${
+                                  isSystemActive
+                                    ? "border-emerald-400 bg-emerald-400 text-black shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+                                    : "border-zinc-600 hover:border-zinc-400"
+                                }`}
+                              >
+                                {isSystemActive && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </button>
+
+                              {/* Model Info */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-white truncate">
+                                    {m.name || m.id}
+                                  </span>
+                                  {isSystemActive && (
+                                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/40 px-1.5 py-0.2 rounded-full shrink-0">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-zinc-500 font-mono truncate">
+                                  {m.id} • {m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k ctx` : "200k ctx"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Actions: Test Model & Remove */}
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              <Button
+                                type="button"
+                                onClick={() => handleTestSpecificModel(m.id)}
+                                disabled={isTesting}
+                                variant="outline"
+                                className="text-[10px] h-6 px-2 py-0.5 rounded-md border-zinc-700/80 bg-zinc-800/90 text-zinc-300 hover:text-white hover:bg-zinc-700 cursor-pointer flex items-center gap-1"
+                              >
+                                {isTesting ? (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-400" />
+                                ) : (
+                                  <Play className="w-2 h-2 text-emerald-400 fill-emerald-400" />
+                                )}
+                                <span>{isTesting ? "Testing..." : "Test"}</span>
+                              </Button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveModel(m.id)}
+                                className="p-1 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800/80 cursor-pointer"
+                                title="Remove model from list"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Inline Test Result Box */}
+                          {testResult && (
+                            <div
+                              className={`p-1.5 px-2.5 rounded-lg text-[10px] flex items-center justify-between font-mono animate-in fade-in duration-100 ${
+                                testResult.success
+                                  ? "bg-emerald-950/40 border border-emerald-800/40 text-emerald-300"
+                                  : "bg-red-950/40 border border-red-800/40 text-red-300"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                {testResult.success ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                ) : (
+                                  <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                )}
+                                <span className="truncate">
+                                  {testResult.success
+                                    ? `Online (${testResult.latencyMs}ms) → "${testResult.reply}"`
+                                    : `Failed (${testResult.latencyMs}ms) → ${testResult.error}`}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModelTestResults((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[m.id];
+                                    return copy;
+                                  })
+                                }
+                                className="text-zinc-500 hover:text-white ml-2"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Form Actions */}
+            <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
+              <Button
+                type="button"
+                onClick={handleSaveCurrentProvider}
+                disabled={isSaving}
+                className="bg-zinc-200 hover:bg-white text-black font-semibold text-xs rounded-xl px-5 py-2 cursor-pointer flex items-center gap-2"
+              >
+                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>{isCreatingNewProvider ? "Add provider" : "Save provider"}</span>
+              </Button>
+
+              {!isCreatingNewProvider && selectedProviderId !== "openrouter" && selectedProviderId !== "gemini" && selectedProviderId !== "anthropic" && selectedProviderId !== "openai" && (
+                <Button
+                  type="button"
+                  onClick={() => handleDeleteProvider(selectedProviderId)}
+                  className="bg-red-950/60 hover:bg-red-900 text-red-400 text-xs rounded-xl px-3 py-2 cursor-pointer flex items-center gap-1.5 border border-red-800/50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete provider</span>
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 1: ADD MODEL MODAL (EXACT IMAGE 1 MATCH) ================= */}
+      {isAddModelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-[#161619] border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Add model</h3>
+              <button
+                type="button"
+                onClick={() => setIsAddModelModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <div className="space-y-3.5">
+              {/* Field 1: Model ID */}
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400 font-normal">Model ID</Label>
+                <Input
+                  type="text"
+                  placeholder="Model ID"
+                  value={modalModelId}
+                  onChange={(e) => setModalModelId(e.target.value)}
+                  className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+                  autoFocus
+                />
+              </div>
+
+              {/* Field 2: Context window */}
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400 font-normal">Context window</Label>
+                <Input
+                  type="number"
+                  placeholder="200000"
+                  value={modalContextWindow}
+                  onChange={(e) => setModalContextWindow(e.target.value)}
+                  className="bg-zinc-900/90 border-zinc-800 text-white font-mono text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+                />
+              </div>
+
+              {/* Advanced Collapsible */}
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer font-medium"
+                >
+                  {isAdvancedOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  <span>Advanced</span>
+                </button>
+
+                {isAdvancedOpen && (
+                  <div className="space-y-1 pl-1 pt-1 animate-in fade-in duration-100">
+                    <Label className="text-xs text-zinc-400 font-normal">Max output tokens</Label>
                     <Input
-                      type="text"
-                      placeholder="e.g. google/gemini-2.0-flash-001 or deepseek/deepseek-chat or custom-model"
-                      value={activeModel}
-                      onChange={(e) => setActiveModel(e.target.value)}
-                      className="bg-zinc-900/90 border-zinc-800 text-white font-mono text-xs focus-visible:ring-emerald-400"
+                      type="number"
+                      placeholder="e.g. 4096 or 8192"
+                      value={modalMaxOutputTokens}
+                      onChange={(e) => setModalMaxOutputTokens(e.target.value)}
+                      className="bg-zinc-900/90 border-zinc-800 text-white font-mono text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
                     />
                   </div>
+                )}
+              </div>
+            </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                    {[
-                      { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", desc: "Ultra fast" },
-                      { id: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet", desc: "Coding master" },
-                      { id: "deepseek/deepseek-chat", label: "DeepSeek V3", desc: "High efficiency" },
-                      { id: "Const", label: "Const (Self-Hosted)", desc: "Custom LLM" },
-                    ].map((pre) => (
-                      <button
-                        key={pre.id}
-                        type="button"
-                        onClick={() => setActiveModel(pre.id)}
-                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                          activeModel === pre.id
-                            ? "bg-zinc-800 border-white text-white font-medium"
-                            : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700"
-                        }`}
-                      >
-                        <p className="text-xs text-white truncate">{pre.label}</p>
-                        <p className="text-[10px] text-zinc-500">{pre.desc}</p>
-                      </button>
-                    ))}
-                  </div>
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800/80">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsAddModelModalOpen(false)}
+                className="text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 px-3 py-1.5 h-auto rounded-xl"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveModalModel}
+                disabled={!modalModelId.trim()}
+                className="bg-white hover:bg-zinc-200 text-black font-semibold text-xs px-4 py-1.5 h-auto rounded-xl shadow-sm"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 2: SEARCHABLE DISCOVERED MODELS IMPORT PICKER ================= */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl bg-[#161619] border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Import models from endpoint</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Discovered {discoveredCandidates.length} models from {editName}. Select the ones you want to add.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search & Quick Category Filters */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="text"
+                  placeholder={`Search ${discoveredCandidates.length} models...`}
+                  value={importSearchQuery}
+                  onChange={(e) => setImportSearchQuery(e.target.value)}
+                  className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 text-xs pl-9 focus-visible:ring-1 focus-visible:ring-zinc-400"
+                  autoFocus
+                />
+                {importSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setImportSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Category Pills & Select All / None */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "const", label: "Const" },
+                    { id: "coding", label: "Coding" },
+                    { id: "reasoning", label: "Reasoning" },
+                    { id: "deepseek", label: "DeepSeek" },
+                    { id: "claude", label: "Claude" },
+                    { id: "gpt", label: "GPT" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setImportCategoryFilter(cat.id)}
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                        importCategoryFilter === cat.id
+                          ? "bg-white text-black font-semibold"
+                          : "bg-zinc-800/80 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
                 </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = new Set(filteredCandidates.map((c) => c.id));
+                      setSelectedCandidates(new Set([...selectedCandidates, ...allIds]));
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+                  >
+                    Select visible ({filteredCandidates.length})
+                  </button>
+                  <span className="text-zinc-600">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCandidates(new Set())}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 font-medium cursor-pointer"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Model Grid / Checklist */}
+            <div className="flex-1 overflow-y-auto border border-zinc-800 rounded-xl p-2 bg-zinc-950/60 space-y-1 min-h-[220px] max-h-[360px] scrollbar-thin scrollbar-thumb-zinc-800">
+              {filteredCandidates.length === 0 ? (
+                <div className="py-12 text-center text-xs text-zinc-500">
+                  No models matched your search filter.
+                </div>
+              ) : (
+                filteredCandidates.map((c) => {
+                  const isChecked = selectedCandidates.has(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        const next = new Set(selectedCandidates);
+                        if (next.has(c.id)) next.delete(c.id);
+                        else next.add(c.id);
+                        setSelectedCandidates(next);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all cursor-pointer border ${
+                        isChecked
+                          ? "bg-zinc-900 border-indigo-500/40 text-white"
+                          : "bg-zinc-900/30 border-transparent text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                            isChecked
+                              ? "border-indigo-400 bg-indigo-500 text-white"
+                              : "border-zinc-700 bg-zinc-900"
+                          }`}
+                        >
+                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold truncate">{c.name || c.id}</p>
+                          <p className="text-[10px] text-zinc-500 font-mono truncate">{c.id}</p>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-mono text-zinc-500 px-2 py-0.5 rounded bg-zinc-800/80 shrink-0 ml-2">
+                        {c.contextLength ? `${Math.round(c.contextLength / 1000)}k ctx` : "200k ctx"}
+                      </span>
+                    </button>
+                  );
+                })
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
+              <span className="text-xs text-zinc-400 font-mono">
+                {selectedCandidates.size} model(s) selected
+              </span>
+
+              <div className="flex items-center gap-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 px-3 py-1.5 h-auto rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={selectedCandidates.size === 0}
+                  className="bg-white hover:bg-zinc-200 text-black font-semibold text-xs px-4 py-1.5 h-auto rounded-xl shadow-sm cursor-pointer"
+                >
+                  Import Selected ({selectedCandidates.size})
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ================= TAB 2: INTELLIGENCE & PERSONA ================= */}
-      {activeTab === "models" && (
+      {activeTab === "persona" && (
         <Card className="bg-[#121214] border-zinc-800 text-white">
           <CardHeader>
             <CardTitle className="text-base font-bold">

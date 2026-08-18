@@ -233,6 +233,26 @@ export const updateUserConfig = mutation({
         openRouter: v.optional(v.string()),
       })
     ),
+    customProviders: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          baseUrl: v.string(),
+          apiKey: v.optional(v.string()),
+          apiFormat: v.string(),
+          isActive: v.boolean(),
+          models: v.array(
+            v.object({
+              id: v.string(),
+              name: v.string(),
+              contextLength: v.optional(v.number()),
+              supportsTools: v.optional(v.boolean()),
+            })
+          ),
+        })
+      )
+    ),
   },
   handler: async (ctx, args) => {
     const config = await ctx.db
@@ -247,6 +267,7 @@ export const updateUserConfig = mutation({
     if (args.operatingMode !== undefined) patchPayload.operatingMode = args.operatingMode;
     if (args.provider !== undefined) patchPayload.provider = args.provider;
     if (args.customBaseUrl !== undefined) patchPayload.customBaseUrl = args.customBaseUrl;
+    if (args.customProviders !== undefined) patchPayload.customProviders = args.customProviders;
     if (args.customApiKeys !== undefined) {
       patchPayload.customApiKeys = {
         ...config.customApiKeys,

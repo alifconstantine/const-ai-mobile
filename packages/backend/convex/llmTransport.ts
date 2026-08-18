@@ -128,18 +128,23 @@ export async function executeLLMCompletion(
       if (!customBaseUrl) {
         throw new Error("Custom Base URL is required for custom_openai provider.");
       }
-      let trimmedBase = customBaseUrl.replace(/\/+$/, "");
-      if (trimmedBase.endsWith("/response")) {
-        trimmedBase = trimmedBase.slice(0, -"/response".length).replace(/\/+$/, "");
-      }
-      if (trimmedBase.endsWith("/chat/completions")) {
+      let trimmedBase = customBaseUrl.trim().replace(/\/+$/, "");
+      if (trimmedBase.endsWith("/responses") || trimmedBase.endsWith("/response")) {
+        endpoint = trimmedBase.endsWith("/responses") ? trimmedBase : `${trimmedBase}s`;
+      } else if (trimmedBase.endsWith("/chat/completions")) {
+        endpoint = trimmedBase;
+      } else if (trimmedBase.endsWith("/api/chat")) {
+        endpoint = trimmedBase;
+      } else if (trimmedBase.endsWith("/v1/messages")) {
         endpoint = trimmedBase;
       } else if (trimmedBase.endsWith("/v1")) {
         endpoint = `${trimmedBase}/chat/completions`;
       } else {
         endpoint = `${trimmedBase}/v1/chat/completions`;
       }
-      headers["Authorization"] = `Bearer ${apiKey}`;
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
       break;
   }
 
@@ -337,16 +342,23 @@ export async function discoverProviderModels(
       }
     }
 
-    const res = await fetch(endpoint, { headers });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(endpoint, {
+      headers,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+
     if (!res.ok) {
-      return getCuratedDefaultModels();
+      return [];
     }
 
     const data = await res.json();
     const rawList = data.data || data.models || [];
 
     if (!Array.isArray(rawList) || rawList.length === 0) {
-      return getCuratedDefaultModels();
+      return [];
     }
 
     return rawList.slice(0, 100).map((m: Record<string, unknown>) => ({
@@ -357,7 +369,7 @@ export async function discoverProviderModels(
       supportsTools: true,
     }));
   } catch {
-    return getCuratedDefaultModels();
+    return [];
   }
 }
 

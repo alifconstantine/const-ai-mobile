@@ -26,41 +26,34 @@ interface ModelItem {
 
 const MODELS: ModelItem[] = [
   {
+    id: "Const",
+    name: "Const (OmniRoute)",
+    isFast: true,
+  },
+  {
     id: "gemini-3.7-flash",
     name: "Gemini 3.7 Flash",
     effort: "High",
     isFast: true,
   },
   {
-    id: "gemini-3.6-flash",
-    name: "Gemini 3.6 Flash",
-    effort: "Medium",
+    id: "claude-3.7-sonnet",
+    name: "Claude 3.7 Sonnet (Thinking)",
     hasThinkingOptions: true,
   },
   {
-    id: "gemini-3.5-flash",
-    name: "Gemini 3.5 Flash",
-    effort: "Medium",
+    id: "deepseek-v3",
+    name: "DeepSeek V3",
     isFast: true,
-    hasThinkingOptions: true,
   },
   {
-    id: "gemini-3.1-pro",
-    name: "Gemini 3.1 Pro",
-    effort: "Low",
-    hasThinkingOptions: true,
+    id: "gemini-2.0-flash",
+    name: "Gemini 2.0 Flash",
+    isFast: true,
   },
   {
-    id: "claude-sonnet-4.6",
-    name: "Claude Sonnet 4.6 (Thinking)",
-  },
-  {
-    id: "claude-opus-4.6",
-    name: "Claude Opus 4.6 (Thinking)",
-  },
-  {
-    id: "gpt-oss-120b",
-    name: "GPT-OSS 120B (Medium)",
+    id: "gpt-4o",
+    name: "GPT-4o",
   },
 ];
 

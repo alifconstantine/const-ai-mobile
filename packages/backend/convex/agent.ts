@@ -352,3 +352,45 @@ export const detectAvailableModels = action({
     );
   },
 });
+
+/**
+ * Tests a specific model ping and reports response latency and output
+ */
+export const testModelEndpoint = action({
+  args: {
+    provider: v.string(),
+    model: v.string(),
+    apiKey: v.optional(v.string()),
+    customBaseUrl: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    const startTime = Date.now();
+    try {
+      const response = await executeLLMCompletion(
+        [{ role: "user", content: "Ping! Respond with 'pong' if you receive this." }],
+        {
+          provider: args.provider as LLMProviderType,
+          model: args.model,
+          apiKey: args.apiKey || "demo_key",
+          customBaseUrl: args.customBaseUrl,
+          maxTokens: 50,
+          temperature: 0.1,
+        }
+      );
+      const latencyMs = Date.now() - startTime;
+      return {
+        success: true,
+        latencyMs,
+        modelUsed: response.modelUsed || args.model,
+        reply: response.content.trim() || "OK",
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      return {
+        success: false,
+        latencyMs,
+        error: err?.message || String(err),
+      };
+    }
+  },
+});

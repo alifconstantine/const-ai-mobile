@@ -56,6 +56,26 @@ export default defineSchema({
     }),
     customBaseUrl: v.optional(v.string()),
     provider: v.optional(v.string()),
+    customProviders: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          baseUrl: v.string(),
+          apiKey: v.optional(v.string()),
+          apiFormat: v.string(),
+          isActive: v.boolean(),
+          models: v.array(
+            v.object({
+              id: v.string(),
+              name: v.string(),
+              contextLength: v.optional(v.number()),
+              supportsTools: v.optional(v.boolean()),
+            })
+          ),
+        })
+      )
+    ),
     sessionSpendCapUsd: v.number(),
     systemPersona: v.string(),
     timezone: v.string(),
