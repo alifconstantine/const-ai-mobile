@@ -377,3 +377,351 @@ export const syncClerkUser = mutation({
   },
 });
 
+/**
+ * Returns comprehensive live dashboard summary metrics for the active authenticated user.
+ * If there is no activity yet, returns actual zeroed metrics.
+ */
+export const getDashboardSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    let targetUserId = null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity && identity.email) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .first();
+      if (user) targetUserId = user._id;
+    }
+
+    if (!targetUserId) {
+      try {
+        targetUserId = await auth.getUserId(ctx);
+      } catch {
+        // ignore
+      }
+    }
+
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+
+    const heatmapDates: { date: string; count: number; level: number }[] = [];
+    const dateCountMap = new Map<string, number>();
+
+    for (let i = 97; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split("T")[0];
+      heatmapDates.push({ date: dStr, count: 0, level: 0 });
+      dateCountMap.set(dStr, 0);
+    }
+
+    const last7DaysMap = new Map<string, { day: string; tokensIn: number; tokensOut: number; messages: number }>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split("T")[0];
+      const dayLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      last7DaysMap.set(dStr, { day: dayLabel, tokensIn: 0, tokensOut: 0, messages: 0 });
+    }
+
+    const defaultStats = {
+      totalSessions: 0,
+      totalMessages: 0,
+      activeDays: 0,
+      currentStreak: 0,
+      favoriteModel: "None",
+      tokensIn: 0,
+      tokensOut: 0,
+      totalTokens: 0,
+      ioRatio: "0.0",
+      providerBreakdown: {
+        all: { tokensIn: 0, tokensOut: 0, label: "All Providers Combined" },
+        omniroute: { tokensIn: 0, tokensOut: 0, label: "OmniRoute (Local Gateway)" },
+        gemini: { tokensIn: 0, tokensOut: 0, label: "Google Gemini Direct" },
+        openrouter: { tokensIn: 0, tokensOut: 0, label: "OpenRouter Multi-LLM" },
+        anthropic: { tokensIn: 0, tokensOut: 0, label: "Anthropic Claude" },
+        openai: { tokensIn: 0, tokensOut: 0, label: "OpenAI GPT" },
+      },
+      dailyTrend: Array.from(last7DaysMap.values()),
+      heatmap: heatmapDates,
+    };
+
+    if (!targetUserId) {
+      return defaultStats;
+    }
+
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_user_updated", (q) => q.eq("userId", targetUserId))
+      .collect();
+
+    const totalSessions = conversations.length;
+    if (totalSessions === 0) {
+      return defaultStats;
+    }
+
+    let totalMessages = 0;
+    let tokensIn = 0;
+    let tokensOut = 0;
+    const modelFrequency = new Map<string, number>();
+    const activeDateSet = new Set<string>();
+
+    const providerTokens: Record<string, { tokensIn: number; tokensOut: number; label: string }> = {
+      all: { tokensIn: 0, tokensOut: 0, label: "All Providers Combined" },
+      omniroute: { tokensIn: 0, tokensOut: 0, label: "OmniRoute (Local Gateway)" },
+      gemini: { tokensIn: 0, tokensOut: 0, label: "Google Gemini Direct" },
+      openrouter: { tokensIn: 0, tokensOut: 0, label: "OpenRouter Multi-LLM" },
+      anthropic: { tokensIn: 0, tokensOut: 0, label: "Anthropic Claude" },
+      openai: { tokensIn: 0, tokensOut: 0, label: "OpenAI GPT" },
+    };
+
+    for (const conv of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+        .collect();
+
+      totalMessages += messages.length;
+
+      for (const msg of messages) {
+        const msgDate = new Date(msg.createdAt).toISOString().split("T")[0];
+        activeDateSet.add(msgDate);
+
+        if (dateCountMap.has(msgDate)) {
+          dateCountMap.set(msgDate, (dateCountMap.get(msgDate) || 0) + 1);
+        }
+
+        const msgIn = msg.promptTokens || 0;
+        const msgOut = msg.completionTokens || 0;
+
+        tokensIn += msgIn;
+        tokensOut += msgOut;
+        providerTokens.all.tokensIn += msgIn;
+        providerTokens.all.tokensOut += msgOut;
+
+        const modelName = msg.modelUsed?.toLowerCase() || "";
+        if (modelName) {
+          modelFrequency.set(modelName, (modelFrequency.get(modelName) || 0) + 1);
+
+          if (modelName.includes("omni") || modelName.includes("localhost") || modelName.includes("const")) {
+            providerTokens.omniroute.tokensIn += msgIn;
+            providerTokens.omniroute.tokensOut += msgOut;
+          } else if (modelName.includes("gemini")) {
+            providerTokens.gemini.tokensIn += msgIn;
+            providerTokens.gemini.tokensOut += msgOut;
+          } else if (modelName.includes("claude") || modelName.includes("anthropic")) {
+            providerTokens.anthropic.tokensIn += msgIn;
+            providerTokens.anthropic.tokensOut += msgOut;
+          } else if (modelName.includes("gpt") || modelName.includes("openai")) {
+            providerTokens.openai.tokensIn += msgIn;
+            providerTokens.openai.tokensOut += msgOut;
+          } else {
+            providerTokens.openrouter.tokensIn += msgIn;
+            providerTokens.openrouter.tokensOut += msgOut;
+          }
+        }
+
+        if (last7DaysMap.has(msgDate)) {
+          const entry = last7DaysMap.get(msgDate)!;
+          entry.tokensIn += msgIn;
+          entry.tokensOut += msgOut;
+          entry.messages += 1;
+        }
+      }
+    }
+
+    let favoriteModel = "None";
+    let maxFreq = 0;
+    for (const [model, freq] of modelFrequency.entries()) {
+      if (freq > maxFreq) {
+        maxFreq = freq;
+        favoriteModel = model;
+      }
+    }
+
+    let currentStreak = 0;
+    const checkDate = new Date(now);
+    const todayActive = activeDateSet.has(todayStr);
+    if (todayActive) {
+      currentStreak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      checkDate.setDate(checkDate.getDate() - 1);
+      const yesterdayStr = checkDate.toISOString().split("T")[0];
+      if (!activeDateSet.has(yesterdayStr)) {
+        currentStreak = 0;
+      }
+    }
+
+    if (currentStreak > 0 || activeDateSet.has(checkDate.toISOString().split("T")[0])) {
+      while (true) {
+        const dStr = checkDate.toISOString().split("T")[0];
+        if (activeDateSet.has(dStr)) {
+          if (!todayActive && currentStreak === 0) {
+            currentStreak = 1;
+          } else if (todayActive) {
+            currentStreak++;
+          }
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    let maxDayCount = 1;
+    for (const count of dateCountMap.values()) {
+      if (count > maxDayCount) maxDayCount = count;
+    }
+
+    const computedHeatmap = heatmapDates.map((item) => {
+      const count = dateCountMap.get(item.date) || 0;
+      let level = 0;
+      if (count > 0) {
+        const ratio = count / maxDayCount;
+        level = ratio < 0.25 ? 1 : ratio < 0.5 ? 2 : ratio < 0.75 ? 3 : 4;
+      }
+      return {
+        date: item.date,
+        count,
+        level,
+      };
+    });
+
+    const totalTokens = tokensIn + tokensOut;
+    const ioRatio = tokensOut > 0 ? (tokensIn / tokensOut).toFixed(1) : "0.0";
+
+    return {
+      totalSessions,
+      totalMessages,
+      activeDays: activeDateSet.size,
+      currentStreak,
+      favoriteModel: favoriteModel === "None" ? "None" : favoriteModel,
+      tokensIn,
+      tokensOut,
+      totalTokens,
+      ioRatio,
+      providerBreakdown: providerTokens,
+      dailyTrend: Array.from(last7DaysMap.values()),
+      heatmap: computedHeatmap,
+    };
+  },
+});
+
+/**
+ * Returns recent LLM call logs for the inspector table.
+ */
+export const listRecentLogs = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const maxItems = args.limit || 50;
+    let targetUserId = null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity && identity.email) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .first();
+      if (user) targetUserId = user._id;
+    }
+
+    if (!targetUserId) {
+      try {
+        targetUserId = await auth.getUserId(ctx);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!targetUserId) return [];
+
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_user_updated", (q) => q.eq("userId", targetUserId))
+      .collect();
+
+    if (conversations.length === 0) return [];
+
+    const logs = [];
+
+    for (const conv of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+        .order("desc")
+        .take(maxItems);
+
+      for (const msg of messages) {
+        if (msg.role === "assistant" || (msg.toolCalls && msg.toolCalls.length > 0)) {
+          const model = msg.modelUsed || "const-agent";
+          let provider: "OMNIROUTE" | "GEMINI" | "OPENROUTER" | "ANTHROPIC" | "OPENAI" | "CUSTOM" = "CUSTOM";
+
+          const lower = model.toLowerCase();
+          if (lower.includes("omni") || lower.includes("localhost") || lower.includes("const")) {
+            provider = "OMNIROUTE";
+          } else if (lower.includes("gemini")) {
+            provider = "GEMINI";
+          } else if (lower.includes("claude") || lower.includes("anthropic")) {
+            provider = "ANTHROPIC";
+          } else if (lower.includes("gpt") || lower.includes("openai")) {
+            provider = "OPENAI";
+          } else if (lower.includes("openrouter") || lower.includes("/")) {
+            provider = "OPENROUTER";
+          }
+
+          logs.push({
+            id: msg._id,
+            timestamp: msg.createdAt,
+            status: (msg.toolCalls?.some((t) => t.status === "failed") ? 500 : 200) as 200 | 400 | 429 | 500,
+            model,
+            provider,
+            tokensIn: msg.promptTokens || 0,
+            tokensOut: msg.completionTokens || 0,
+            durationMs: 0,
+            promptSnippet: `Conversation: ${conv.title}`,
+            responseSnippet: msg.content || "Tool calling execution turn",
+            toolsCalled: msg.toolCalls?.map((t) => t.toolName) || [],
+          });
+        }
+      }
+    }
+
+    return logs.sort((a, b) => b.timestamp - a.timestamp).slice(0, maxItems);
+  },
+});
+
+/**
+ * Lists connected devices for the authenticated user.
+ */
+export const listDevices = query({
+  args: {},
+  handler: async (ctx) => {
+    let targetUserId = null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity && identity.email) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .first();
+      if (user) targetUserId = user._id;
+    }
+
+    if (!targetUserId) {
+      try {
+        targetUserId = await auth.getUserId(ctx);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!targetUserId) return [];
+
+    return await ctx.db
+      .query("devices")
+      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .collect();
+  },
+});
+
+

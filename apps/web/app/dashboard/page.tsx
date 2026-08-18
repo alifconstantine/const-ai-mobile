@@ -41,7 +41,6 @@ import {
   LayoutDashboard,
   ListFilter,
   Search,
-  RefreshCw,
   Flame,
   MessageSquare,
   FolderKanban,
@@ -49,30 +48,42 @@ import {
   Cpu,
   Zap,
   CheckCircle2,
-  AlertTriangle,
   XCircle,
   Smartphone,
   BatteryCharging,
+  Battery,
   HardDrive,
   Server,
   Eye,
-  ArrowUpRight,
   ShieldCheck,
   Activity,
   Clock,
   Layers,
   Sparkles,
+  SmartphoneNfc,
+  Plus,
 } from "lucide-react";
 
 import { useQuery } from "convex/react";
 import { api } from "@const-ai/backend";
 import { useUser } from "@clerk/nextjs";
 
-// ============================================================================
-// Types & Mock Fallback Data (When fresh / empty)
-// ============================================================================
+// Helper: Format number with compact K/M suffixes
+function formatCompact(num: number): string {
+  if (!num || isNaN(num)) return "0";
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
+  return num.toLocaleString();
+}
 
-interface LogEntry {
+// Helper: Format timestamp
+function formatTime(timestamp: number): string {
+  if (!timestamp) return "—";
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+interface LogItem {
   id: string;
   timestamp: number;
   status: 200 | 400 | 429 | 500;
@@ -86,106 +97,14 @@ interface LogEntry {
   toolsCalled?: string[];
 }
 
-const SAMPLE_LOGS: LogEntry[] = [
-  {
-    id: "req_01j9a8b1c2d3e4f5",
-    timestamp: Date.now() - 1000 * 60 * 2, // 2 mins ago
-    status: 200,
-    model: "gemini-2.0-flash",
-    provider: "OMNIROUTE",
-    tokensIn: 1842,
-    tokensOut: 420,
-    durationMs: 380,
-    promptSnippet: "Clean junk APK files in /sdcard/Download and analyze storage savings",
-    responseSnippet: "Scanned and identified 3 residual APK files freeing approximately 185 MB.",
-    toolsCalled: ["device_manageStorage", "termux_runScript"],
-  },
-  {
-    id: "req_01j9a8b1c2d3e4f6",
-    timestamp: Date.now() - 1000 * 60 * 15,
-    status: 200,
-    model: "claude-3-7-sonnet",
-    provider: "OPENROUTER",
-    tokensIn: 3410,
-    tokensOut: 890,
-    durationMs: 1240,
-    promptSnippet: "Refactor NavigationContext state dispatcher for smooth drawer animation",
-    responseSnippet: "Implemented atomic state hooks with re-render minimization guards.",
-    toolsCalled: ["system_updatePlan"],
-  },
-  {
-    id: "req_01j9a8b1c2d3e4f7",
-    timestamp: Date.now() - 1000 * 60 * 42,
-    status: 200,
-    model: "gemini-2.0-flash",
-    provider: "GEMINI",
-    tokensIn: 1205,
-    tokensOut: 260,
-    durationMs: 310,
-    promptSnippet: "Check battery status and current volume level on Android companion",
-    responseSnippet: "Device battery is at 85% (Charging), Master volume set to 75%.",
-    toolsCalled: ["device_controlHardware"],
-  },
-  {
-    id: "req_01j9a8b1c2d3e4f8",
-    timestamp: Date.now() - 1000 * 60 * 95,
-    status: 429,
-    model: "gpt-4o",
-    provider: "OPENAI",
-    tokensIn: 2150,
-    tokensOut: 0,
-    durationMs: 820,
-    promptSnippet: "Analyze system logs for accessibility permission errors",
-    responseSnippet: "Rate limit exceeded: 429 Too Many Requests on secondary OpenAI fallback.",
-  },
-  {
-    id: "req_01j9a8b1c2d3e4f9",
-    timestamp: Date.now() - 1000 * 60 * 180,
-    status: 200,
-    model: "claude-3-7-sonnet",
-    provider: "OMNIROUTE",
-    tokensIn: 4520,
-    tokensOut: 1150,
-    durationMs: 1560,
-    promptSnippet: "Generate Kotlin Accessibility spatial coordinate parser for dynamic buttons",
-    responseSnippet: "Created AccessibilityBridge.kt with recursive node bounds calculator.",
-    toolsCalled: ["accessibility_performAction"],
-  },
-  {
-    id: "req_01j9a8b1c2d3e4f0",
-    timestamp: Date.now() - 1000 * 60 * 320,
-    status: 200,
-    model: "gemini-2.0-flash",
-    provider: "GEMINI",
-    tokensIn: 980,
-    tokensOut: 195,
-    durationMs: 275,
-    promptSnippet: "Synthesize voice response preview using Supertonic-3 M1 style",
-    responseSnippet: "Voice style M1 ONNX weights loaded and streamed to speaker buffer.",
-  },
-];
-
-// Helper: Format number with compact K/M suffixes
-function formatCompact(num: number): string {
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
-  if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
-  return num.toLocaleString();
-}
-
-// Helper: Format timestamp
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
 export default function DashboardPage() {
   const { user: clerkUser } = useUser();
   const liveViewer = useQuery(api.users.viewer);
+
+  // Real Queries from Convex
+  const dashboardStats = useQuery(api.users.getDashboardSummary);
+  const recentLogsRaw = useQuery(api.users.listRecentLogs, { limit: 100 });
+  const connectedDevices = useQuery(api.users.listDevices);
 
   // Active Tab: "dashboard" (Overview) vs "logs" (LLM Call Inspector)
   const [activeTab, setActiveTab] = useState<"dashboard" | "logs">("dashboard");
@@ -197,7 +116,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "error">("all");
   const [logProviderFilter, setLogProviderFilter] = useState<string>("all");
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [selectedLog, setSelectedLog] = useState<LogItem | null>(null);
 
   // User details
   const userName =
@@ -207,7 +126,6 @@ export default function DashboardPage() {
     "Operator";
 
   const activeModel = liveViewer?.config?.activeModel || "Const";
-  const customBaseUrl = liveViewer?.config?.customBaseUrl || "http://localhost:20128/v1";
 
   // Operating Mode
   const operatingMode = liveViewer?.config?.operatingMode || "ask_before_change";
@@ -219,84 +137,58 @@ export default function DashboardPage() {
   };
   const currentMode = operatingModeLabels[operatingMode] || operatingModeLabels.ask_before_change;
 
-  // Real or derived stats
-  const totalSessions = 18;
-  const totalMessages = 284;
-  const activeDays = 14;
-  const currentStreak = 5;
-  const favoriteModel = "Gemini 2.0 Flash";
+  // Real Stats Extract
+  const totalSessions = dashboardStats?.totalSessions ?? 0;
+  const totalMessages = dashboardStats?.totalMessages ?? 0;
+  const activeDays = dashboardStats?.activeDays ?? 0;
+  const currentStreak = dashboardStats?.currentStreak ?? 0;
+  const favoriteModel = dashboardStats?.favoriteModel ?? "None";
 
-  // Token breakdown data per provider
-  const tokenStatsByProvider: Record<
-    string,
-    { tokensIn: number; tokensOut: number; label: string }
-  > = {
-    all: { tokensIn: 184200, tokensOut: 52400, label: "All Providers Combined" },
-    omniroute: { tokensIn: 98500, tokensOut: 28100, label: "OmniRoute (Local Gateway)" },
-    gemini: { tokensIn: 54200, tokensOut: 15300, label: "Google Gemini Direct" },
-    openrouter: { tokensIn: 22100, tokensOut: 6200, label: "OpenRouter Multi-LLM" },
-    anthropic: { tokensIn: 7400, tokensOut: 2200, label: "Anthropic Claude" },
-    openai: { tokensIn: 2000, tokensOut: 600, label: "OpenAI GPT" },
-  };
-
-  const currentTokenStats = tokenStatsByProvider[selectedProvider] || tokenStatsByProvider.all;
-  const totalTokens = currentTokenStats.tokensIn + currentTokenStats.tokensOut;
-  const ioRatio =
-    currentTokenStats.tokensOut > 0
-      ? (currentTokenStats.tokensIn / currentTokenStats.tokensOut).toFixed(1)
-      : "1.0";
-  const tokenInPercent =
-    totalTokens > 0 ? Math.round((currentTokenStats.tokensIn / totalTokens) * 100) : 75;
-
-  // Daily Trend Chart Data (Last 7 Days)
-  const dailyTrendData = [
-    { day: "Aug 12", tokensIn: 18400, tokensOut: 5200, messages: 32 },
-    { day: "Aug 13", tokensIn: 24500, tokensOut: 6900, messages: 44 },
-    { day: "Aug 14", tokensIn: 31200, tokensOut: 8800, messages: 56 },
-    { day: "Aug 15", tokensIn: 19800, tokensOut: 5400, messages: 38 },
-    { day: "Aug 16", tokensIn: 42100, tokensOut: 12400, messages: 68 },
-    { day: "Aug 17", tokensIn: 28600, tokensOut: 7900, messages: 45 },
-    { day: "Aug 18", tokensIn: 19600, tokensOut: 5800, messages: 31 },
-  ];
-
-  // GitHub-style Activity Heatmap (14 weeks = 98 days)
-  const heatmapData = useMemo(() => {
-    const days = [];
-    const now = new Date();
-    for (let i = 97; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      // Deterministic activity intensity
-      const dayOfWeek = d.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      let count = 0;
-      if (i < 30) {
-        count = isWeekend ? (i % 3 === 0 ? 12 : 0) : ((i * 7) % 45) + 8;
-      } else if (i < 60) {
-        count = i % 2 === 0 ? ((i * 5) % 35) + 5 : 0;
-      } else {
-        count = i % 4 === 0 ? ((i * 3) % 20) + 2 : 0;
-      }
-      days.push({
-        date: d.toISOString().split("T")[0],
-        count,
-        level: count === 0 ? 0 : count < 10 ? 1 : count < 25 ? 2 : count < 40 ? 3 : 4,
-      });
+  // Real Token Breakdown per provider
+  const currentTokenStats = useMemo(() => {
+    if (!dashboardStats?.providerBreakdown) {
+      return { tokensIn: 0, tokensOut: 0, label: "All Providers Combined" };
     }
-    return days;
-  }, []);
+    return (
+      dashboardStats.providerBreakdown[selectedProvider as keyof typeof dashboardStats.providerBreakdown] ||
+      dashboardStats.providerBreakdown.all
+    );
+  }, [dashboardStats, selectedProvider]);
+
+  const totalTokens = (currentTokenStats?.tokensIn || 0) + (currentTokenStats?.tokensOut || 0);
+  const ioRatio =
+    currentTokenStats && currentTokenStats.tokensOut > 0
+      ? (currentTokenStats.tokensIn / currentTokenStats.tokensOut).toFixed(1)
+      : "0.0";
+  const tokenInPercent =
+    totalTokens > 0 ? Math.round(((currentTokenStats?.tokensIn || 0) / totalTokens) * 100) : 0;
+
+  // Daily Trend Chart Data (from Real Convex Query)
+  const dailyTrendData = useMemo(() => {
+    return dashboardStats?.dailyTrend || [];
+  }, [dashboardStats]);
+
+  // Heatmap Data (from Real Convex Query)
+  const heatmapData = useMemo(() => {
+    return dashboardStats?.heatmap || [];
+  }, [dashboardStats]);
+
+  // Logs list (from Real Convex Query)
+  const recentLogs: LogItem[] = useMemo(() => {
+    return (recentLogsRaw || []) as LogItem[];
+  }, [recentLogsRaw]);
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
-    return SAMPLE_LOGS.filter((log) => {
+    return recentLogs.filter((log) => {
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesQuery =
-          log.model.toLowerCase().includes(q) ||
-          log.provider.toLowerCase().includes(q) ||
-          log.promptSnippet.toLowerCase().includes(q) ||
-          log.id.toLowerCase().includes(q);
+          log.model?.toLowerCase().includes(q) ||
+          log.provider?.toLowerCase().includes(q) ||
+          log.promptSnippet?.toLowerCase().includes(q) ||
+          log.id?.toLowerCase().includes(q);
         if (!matchesQuery) return false;
       }
 
@@ -307,14 +199,17 @@ export default function DashboardPage() {
       // Provider filter
       if (
         logProviderFilter !== "all" &&
-        log.provider.toLowerCase() !== logProviderFilter.toLowerCase()
+        log.provider?.toLowerCase() !== logProviderFilter.toLowerCase()
       ) {
         return false;
       }
 
       return true;
     });
-  }, [searchQuery, statusFilter, logProviderFilter]);
+  }, [recentLogs, searchQuery, statusFilter, logProviderFilter]);
+
+  // Connected Devices (from Real Convex Query)
+  const primaryDevice = connectedDevices && connectedDevices.length > 0 ? connectedDevices[0] : null;
 
   return (
     <div className="space-y-6 select-none max-w-6xl pb-12">
@@ -324,7 +219,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/70 border border-emerald-800/40 text-emerald-400 text-[11px] font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Convex Realtime Sync Live</span>
+              <span>Convex Realtime Live</span>
             </div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/50 text-zinc-300 text-[11px] font-mono">
               <Cpu className="w-3 h-3 text-indigo-400" />
@@ -389,7 +284,7 @@ export default function DashboardPage() {
                   : "border-zinc-700 text-zinc-400"
               }`}
             >
-              {SAMPLE_LOGS.length}
+              {recentLogs.length}
             </Badge>
           </button>
         </div>
@@ -418,7 +313,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-[11px] text-zinc-500 font-mono">
-                  Autonomous task threads
+                  {totalSessions > 0 ? "Autonomous task threads" : "No task sessions created"}
                 </p>
               </CardContent>
             </Card>
@@ -436,7 +331,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-[11px] text-zinc-500 font-mono">
-                  User prompts & AI turns
+                  {totalMessages > 0 ? "User prompts & AI turns" : "No messages recorded"}
                 </p>
               </CardContent>
             </Card>
@@ -446,13 +341,23 @@ export default function DashboardPage() {
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-center text-zinc-400">
                   <span className="text-xs font-medium">Activity Streak</span>
-                  <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <Flame
+                    className={`w-4 h-4 ${
+                      currentStreak > 0 ? "text-amber-400 fill-amber-400" : "text-zinc-600"
+                    }`}
+                  />
                 </div>
                 <CardTitle className="text-2xl font-bold mt-1 text-white flex items-center gap-1.5">
                   <span>{currentStreak} Days</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-800/50 text-amber-300 font-normal font-mono">
-                    Active
-                  </span>
+                  {currentStreak > 0 ? (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-800/50 text-amber-300 font-normal font-mono">
+                      Active 🔥
+                    </span>
+                  ) : (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-normal font-mono">
+                      Idle
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -475,7 +380,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-[11px] text-zinc-500 font-mono truncate">
-                  Primary reasoning engine
+                  {favoriteModel !== "None" ? "Most active intelligence" : "Awaiting first prompt"}
                 </p>
               </CardContent>
             </Card>
@@ -526,7 +431,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="text-2xl font-bold text-white font-mono">
-                    {formatCompact(currentTokenStats.tokensIn)}
+                    {formatCompact(currentTokenStats?.tokensIn || 0)}
                   </div>
                   <p className="text-[10px] text-zinc-500 font-mono mt-1">
                     System prompts, tool schemas & context
@@ -537,11 +442,11 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
                     <span>Output Tokens (Generated TO)</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 font-mono">
-                      {100 - tokenInPercent}%
+                      {totalTokens > 0 ? 100 - tokenInPercent : 0}%
                     </span>
                   </div>
                   <div className="text-2xl font-bold text-emerald-400 font-mono">
-                    {formatCompact(currentTokenStats.tokensOut)}
+                    {formatCompact(currentTokenStats?.tokensOut || 0)}
                   </div>
                   <p className="text-[10px] text-zinc-500 font-mono mt-1">
                     Model completions & tool call arguments
@@ -559,7 +464,7 @@ export default function DashboardPage() {
                     {formatCompact(totalTokens)}
                   </div>
                   <p className="text-[10px] text-zinc-500 font-mono mt-1">
-                    {currentTokenStats.label}
+                    {currentTokenStats?.label || "No provider tokens recorded"}
                   </p>
                 </div>
               </div>
@@ -568,19 +473,25 @@ export default function DashboardPage() {
               <div className="space-y-1.5">
                 <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
                   <span>Input Tokens ({tokenInPercent}%)</span>
-                  <span>Output Tokens ({100 - tokenInPercent}%)</span>
+                  <span>Output Tokens ({totalTokens > 0 ? 100 - tokenInPercent : 0}%)</span>
                 </div>
                 <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden flex">
-                  <div
-                    style={{ width: `${tokenInPercent}%` }}
-                    className="bg-indigo-500 transition-all duration-500"
-                    title={`Input: ${formatCompact(currentTokenStats.tokensIn)}`}
-                  />
-                  <div
-                    style={{ width: `${100 - tokenInPercent}%` }}
-                    className="bg-emerald-400 transition-all duration-500"
-                    title={`Output: ${formatCompact(currentTokenStats.tokensOut)}`}
-                  />
+                  {totalTokens > 0 ? (
+                    <>
+                      <div
+                        style={{ width: `${tokenInPercent}%` }}
+                        className="bg-indigo-500 transition-all duration-500"
+                        title={`Input: ${formatCompact(currentTokenStats?.tokensIn || 0)}`}
+                      />
+                      <div
+                        style={{ width: `${100 - tokenInPercent}%` }}
+                        className="bg-emerald-400 transition-all duration-500"
+                        title={`Output: ${formatCompact(currentTokenStats?.tokensOut || 0)}`}
+                      />
+                    </>
+                  ) : (
+                    <div className="w-full bg-zinc-900" />
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -615,26 +526,32 @@ export default function DashboardPage() {
             <CardContent>
               <div className="overflow-x-auto pb-2">
                 <div className="inline-grid grid-rows-7 grid-flow-col gap-1.5 min-w-[680px]">
-                  {heatmapData.map((item, idx) => {
-                    const colorClass =
-                      item.level === 0
-                        ? "bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-600"
-                        : item.level === 1
-                          ? "bg-emerald-950 border border-emerald-900/80 hover:border-emerald-700"
-                          : item.level === 2
-                            ? "bg-emerald-800 border border-emerald-700/80 hover:border-emerald-500"
-                            : item.level === 3
-                              ? "bg-emerald-600 border border-emerald-500/80 hover:border-emerald-400"
-                              : "bg-emerald-400 border border-emerald-300 hover:brightness-110";
+                  {heatmapData.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-zinc-500 font-mono">
+                      No interaction history recorded yet.
+                    </div>
+                  ) : (
+                    heatmapData.map((item: { date: string; count: number; level: number }, idx: number) => {
+                      const colorClass =
+                        item.level === 0
+                          ? "bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-600"
+                          : item.level === 1
+                            ? "bg-emerald-950 border border-emerald-900/80 hover:border-emerald-700"
+                            : item.level === 2
+                              ? "bg-emerald-800 border border-emerald-700/80 hover:border-emerald-500"
+                              : item.level === 3
+                                ? "bg-emerald-600 border border-emerald-500/80 hover:border-emerald-400"
+                                : "bg-emerald-400 border border-emerald-300 hover:brightness-110";
 
-                    return (
-                      <div
-                        key={idx}
-                        title={`${item.date}: ${item.count} AI interactions`}
-                        className={`w-3.5 h-3.5 rounded-xs transition-colors cursor-pointer ${colorClass}`}
-                      />
-                    );
-                  })}
+                      return (
+                        <div
+                          key={idx}
+                          title={`${item.date}: ${item.count} AI interactions`}
+                          className={`w-3.5 h-3.5 rounded-xs transition-colors cursor-pointer ${colorClass}`}
+                        />
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -653,55 +570,63 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="h-64 pt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="tokenInGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="tokenOutGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="day" stroke="#71717a" fontSize={11} tickLine={false} />
-                    <YAxis
-                      stroke="#71717a"
-                      fontSize={11}
-                      tickLine={false}
-                      tickFormatter={(val) => formatCompact(val)}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#18181b",
-                        borderColor: "#3f3f46",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                        color: "#fff",
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="tokensIn"
-                      name="Input Tokens"
-                      stroke="#6366f1"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#tokenInGrad)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="tokensOut"
-                      name="Output Tokens"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#tokenOutGrad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {dailyTrendData.every((d: { tokensIn: number; tokensOut: number; messages: number }) => d.tokensIn === 0 && d.tokensOut === 0) ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500">
+                    <Activity className="w-8 h-8 text-zinc-700 mb-2" />
+                    <p className="text-xs">No token consumption recorded in the last 7 days.</p>
+                    <p className="text-[10px] text-zinc-600 mt-0.5">Start a chat on mobile or send a prompt to populate telemetry.</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="tokenInGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                        </linearGradient>
+                        <linearGradient id="tokenOutGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="day" stroke="#71717a" fontSize={11} tickLine={false} />
+                      <YAxis
+                        stroke="#71717a"
+                        fontSize={11}
+                        tickLine={false}
+                        tickFormatter={(val) => formatCompact(val)}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          borderColor: "#3f3f46",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          color: "#fff",
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="tokensIn"
+                        name="Input Tokens"
+                        stroke="#6366f1"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#tokenInGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="tokensOut"
+                        name="Output Tokens"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#tokenOutGrad)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
 
@@ -717,28 +642,35 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="h-64 pt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="day" stroke="#71717a" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#71717a" fontSize={11} tickLine={false} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#18181b",
-                        borderColor: "#3f3f46",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                        color: "#fff",
-                      }}
-                    />
-                    <Bar dataKey="messages" name="Messages" fill="#10b981" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {dailyTrendData.every((d: { tokensIn: number; tokensOut: number; messages: number }) => d.messages === 0) ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500">
+                    <MessageSquare className="w-8 h-8 text-zinc-700 mb-2" />
+                    <p className="text-xs">No turn messages in the last 7 days.</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="day" stroke="#71717a" fontSize={11} tickLine={false} />
+                      <YAxis stroke="#71717a" fontSize={11} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          borderColor: "#3f3f46",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          color: "#fff",
+                        }}
+                      />
+                      <Bar dataKey="messages" name="Messages" fill="#10b981" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* 5. Passive Android Device Telemetry Card */}
+          {/* 5. Connected Android Device Telemetry Card */}
           <Card className="bg-[#121214] border-zinc-800 text-white">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -753,74 +685,115 @@ export default function DashboardPage() {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="border-emerald-800 bg-emerald-950/70 text-emerald-400 text-xs font-mono"
-                >
-                  ● Android • Online
-                </Badge>
+                {primaryDevice ? (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-mono ${
+                      primaryDevice.isOnline
+                        ? "border-emerald-800 bg-emerald-950/70 text-emerald-400"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-400"
+                    }`}
+                  >
+                    ● {primaryDevice.deviceName} • {primaryDevice.isOnline ? "Online" : "Offline"}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="border-zinc-800 bg-zinc-900/80 text-zinc-500 text-xs font-mono"
+                  >
+                    No devices paired
+                  </Badge>
+                )}
               </div>
             </CardHeader>
 
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                {/* Battery */}
-                <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
-                    <BatteryCharging className="w-4 h-4 text-emerald-400" />
-                    <span>Battery Status</span>
+              {primaryDevice ? (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  {/* Battery */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
+                      {primaryDevice.isCharging ? (
+                        <BatteryCharging className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <Battery className="w-4 h-4 text-zinc-400" />
+                      )}
+                      <span>Battery Status</span>
+                    </div>
+                    <div className="text-lg font-bold text-white font-mono">
+                      {primaryDevice.batteryLevel !== undefined ? `${primaryDevice.batteryLevel}%` : "—"}{" "}
+                      {primaryDevice.isCharging && (
+                        <span className="text-xs text-emerald-400 font-normal">Charging ⚡</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                      Updated {formatTime(primaryDevice.lastPingAt)}
+                    </p>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
-                    85% <span className="text-xs text-emerald-400 font-normal">Charging ⚡</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                    Temperature 31.4°C • Normal
-                  </p>
-                </div>
 
-                {/* RAM */}
-                <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
-                    <Cpu className="w-4 h-4 text-indigo-400" />
-                    <span>RAM Memory</span>
+                  {/* RAM */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
+                      <Cpu className="w-4 h-4 text-indigo-400" />
+                      <span>RAM Memory</span>
+                    </div>
+                    <div className="text-lg font-bold text-white font-mono">
+                      {primaryDevice.ramFreeMb !== undefined
+                        ? `${(primaryDevice.ramFreeMb / 1024).toFixed(1)} GB Free`
+                        : "—"}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                      {primaryDevice.ramTotalMb
+                        ? `of ${(primaryDevice.ramTotalMb / 1024).toFixed(1)} GB total`
+                        : "Passive snapshot"}
+                    </p>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
-                    4.2 GB <span className="text-xs text-zinc-400 font-normal">/ 8.0 GB</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                    52% free capacity
-                  </p>
-                </div>
 
-                {/* Storage */}
-                <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
-                    <HardDrive className="w-4 h-4 text-amber-400" />
-                    <span>Internal Storage</span>
+                  {/* Storage */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
+                      <HardDrive className="w-4 h-4 text-amber-400" />
+                      <span>Internal Storage</span>
+                    </div>
+                    <div className="text-lg font-bold text-white font-mono">
+                      {primaryDevice.storageFreeGb !== undefined
+                        ? `${primaryDevice.storageFreeGb} GB Free`
+                        : "—"}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                      {primaryDevice.storageTotalGb
+                        ? `of ${primaryDevice.storageTotalGb} GB total`
+                        : "StatFs query"}
+                    </p>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
-                    48 GB <span className="text-xs text-zinc-400 font-normal">/ 128 GB Free</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                    StatFs fast query
-                  </p>
-                </div>
 
-                {/* Privileged Bridges */}
-                <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Bridges & Daemons</span>
+                  {/* Privileged Bridges */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 mb-1">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>Bridges & Daemons</span>
+                    </div>
+                    <div className="text-xs font-mono space-y-0.5">
+                      <div className={primaryDevice.shizukuActive ? "text-emerald-400" : "text-zinc-500"}>
+                        ● Shizuku: {primaryDevice.shizukuActive ? "Granted" : "Inactive"}
+                      </div>
+                      <div className={primaryDevice.accessibilityActive ? "text-emerald-400" : "text-zinc-500"}>
+                        ● Spatial UI: {primaryDevice.accessibilityActive ? "Active" : "Inactive"}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs font-mono space-y-0.5">
-                    <div className="text-emerald-400">● Shizuku: Granted</div>
-                    <div className="text-emerald-400">● Spatial UI: Active</div>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                    Termux CLI Available
-                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="p-8 rounded-2xl bg-zinc-900/40 border border-zinc-800/60 text-center space-y-3">
+                  <SmartphoneNfc className="w-8 h-8 text-zinc-600 mx-auto" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">No Android device connected yet</h3>
+                    <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1">
+                      Open the Const AI Mobile app on your Android phone to automatically register and stream passive telemetry.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -863,7 +836,7 @@ export default function DashboardPage() {
                           : "text-zinc-400 hover:text-white"
                       }`}
                     >
-                      All ({SAMPLE_LOGS.length})
+                      All ({recentLogs.length})
                     </button>
                     <button
                       onClick={() => setStatusFilter("success")}
@@ -926,8 +899,14 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-zinc-800/60 font-mono">
                   {filteredLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-zinc-500">
-                        No LLM call logs match the selected filter.
+                      <td colSpan={7} className="py-12 text-center text-zinc-500">
+                        <Activity className="w-6 h-6 text-zinc-700 mx-auto mb-2" />
+                        <p className="text-xs font-semibold text-zinc-400">No LLM call logs found</p>
+                        <p className="text-[11px] text-zinc-600 mt-0.5">
+                          {searchQuery
+                            ? "Try clearing your search query or filter."
+                            : "As you interact with the agent, requests will be logged here in realtime."}
+                        </p>
                       </td>
                     </tr>
                   ) : (
@@ -979,9 +958,11 @@ export default function DashboardPage() {
 
                         {/* Duration */}
                         <td className="py-3 px-4 text-zinc-400">
-                          {log.durationMs < 1000
-                            ? `${log.durationMs}ms`
-                            : `${(log.durationMs / 1000).toFixed(2)}s`}
+                          {log.durationMs > 0
+                            ? log.durationMs < 1000
+                              ? `${log.durationMs}ms`
+                              : `${(log.durationMs / 1000).toFixed(2)}s`
+                            : "—"}
                         </td>
 
                         {/* Time */}
@@ -1060,7 +1041,9 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <div className="text-zinc-500 text-[10px]">LATENCY</div>
-                  <div className="text-amber-400 font-semibold">{selectedLog.durationMs} ms</div>
+                  <div className="text-amber-400 font-semibold">
+                    {selectedLog.durationMs > 0 ? `${selectedLog.durationMs} ms` : "—"}
+                  </div>
                 </div>
               </div>
 
