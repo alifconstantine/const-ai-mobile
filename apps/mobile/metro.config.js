@@ -17,21 +17,20 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, "node_modules"),
 ];
 
-// 3. Resolve Clerk and subpackage exports smoothly in pnpm monorepo
+// 3. Resolve Clerk and subpackage exports as CommonJS for Metro bundler
 const clerkReactPkg = path.dirname(require.resolve("@clerk/react/package.json"));
 const clerkSharedPkg = path.dirname(require.resolve("@clerk/shared/package.json"));
 const clerkExpoPkg = path.dirname(require.resolve("@clerk/expo/package.json"));
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Handle @clerk/react subpaths (e.g. @clerk/react/internal, @clerk/react/errors, @clerk/react/legacy)
+  // Handle @clerk/react subpaths - prioritize CJS (.cjs / .js) to avoid ESM scope mismatch
   if (moduleName.startsWith("@clerk/react/")) {
     const subpath = moduleName.replace("@clerk/react/", "");
     const candidates = [
-      path.join(clerkReactPkg, `dist/${subpath}.mjs`),
       path.join(clerkReactPkg, `dist/${subpath}.cjs`),
-      path.join(clerkReactPkg, `dist/${subpath}/index.mjs`),
-      path.join(clerkReactPkg, `dist/${subpath}/index.cjs`),
       path.join(clerkReactPkg, `dist/${subpath}.js`),
+      path.join(clerkReactPkg, `dist/${subpath}/index.cjs`),
+      path.join(clerkReactPkg, `dist/${subpath}/index.js`),
     ];
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
@@ -43,13 +42,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // Handle @clerk/shared subpaths (e.g. @clerk/shared/error, @clerk/shared/proxy, @clerk/shared/telemetry)
+  // Handle @clerk/shared subpaths - prioritize CJS (.js / .cjs)
   if (moduleName.startsWith("@clerk/shared/")) {
     const subpath = moduleName.replace("@clerk/shared/", "");
     const candidates = [
-      path.join(clerkSharedPkg, `dist/${subpath}.mjs`),
       path.join(clerkSharedPkg, `dist/${subpath}.js`),
-      path.join(clerkSharedPkg, `dist/${subpath}/index.mjs`),
+      path.join(clerkSharedPkg, `dist/${subpath}.cjs`),
       path.join(clerkSharedPkg, `dist/${subpath}/index.js`),
     ];
     for (const candidate of candidates) {
@@ -68,7 +66,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     const candidates = [
       path.join(clerkExpoPkg, `dist/${subpath}.js`),
       path.join(clerkExpoPkg, `dist/${subpath}/index.js`),
-      path.join(clerkExpoPkg, `dist/${subpath}.mjs`),
+      path.join(clerkExpoPkg, `dist/${subpath}.cjs`),
     ];
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
