@@ -194,11 +194,20 @@ export default function HomeScreen() {
   };
 
   const modelPillLabel = useMemo(() => {
-    const raw = activeModel || userConfig?.activeModel || "Const";
+    const customProvs = userConfig?.customProviders || [];
+    const keys = userConfig?.customApiKeys;
+    const hasAnyConfigured =
+      customProvs.some((p: any) => p.isActive !== false && p.models?.length > 0) ||
+      Boolean(keys?.gemini || keys?.anthropic || keys?.openAi || keys?.openRouter);
+
+    const raw = activeModel || userConfig?.activeModel || "";
+    if (!raw || !hasAnyConfigured) {
+      return "Manage models";
+    }
 
     // 1. Search in custom providers
-    if (userConfig?.customProviders && userConfig.customProviders.length > 0) {
-      for (const prov of userConfig.customProviders) {
+    if (customProvs.length > 0) {
+      for (const prov of customProvs) {
         if (prov.isActive !== false && prov.models) {
           const matched = prov.models.find(
             (m: { id: string; name?: string }) => m.id === raw || m.name === raw
@@ -228,7 +237,7 @@ export default function HomeScreen() {
     }
 
     if (raw === "Const") return "OmniRoute / Const";
-    return raw || "Select model";
+    return raw || "Manage models";
   }, [userConfig, activeModel]);
 
   if (isAuthLoading) {

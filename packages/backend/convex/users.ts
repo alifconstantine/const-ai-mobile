@@ -91,19 +91,7 @@ function sanitizeUserConfig(config: any) {
   };
 }
 
-const DEFAULT_CUSTOM_PROVIDERS = [
-  {
-    id: "omniroute",
-    name: "OmniRoute",
-    baseUrl: "http://localhost:20128/v1",
-    apiKey: "",
-    apiFormat: "openai_completions",
-    isActive: true,
-    models: [
-      { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
-    ],
-  },
-];
+const DEFAULT_CUSTOM_PROVIDERS: any[] = [];
 
 export const getOrCreateDefaultUser = mutation({
   args: {
@@ -153,7 +141,7 @@ export const getOrCreateDefaultUser = mutation({
       const configId = await ctx.db.insert("userConfigs", {
         userId: targetUser._id,
         inferenceMode: "byok",
-        activeModel: "Const",
+        activeModel: "",
         operatingMode: "ask_before_change",
         provider: "custom_openai",
         customBaseUrl: "http://localhost:20128/v1",
@@ -296,7 +284,7 @@ export const updateUserConfig = mutation({
       const configId = await ctx.db.insert("userConfigs", {
         userId,
         inferenceMode: "byok",
-        activeModel: (args.activeModel as string) || "Const",
+        activeModel: (args.activeModel as string) || "",
         operatingMode: (args.operatingMode as any) || "ask_before_change",
         provider: args.provider || "custom_openai",
         customBaseUrl: args.customBaseUrl || "http://localhost:20128/v1",

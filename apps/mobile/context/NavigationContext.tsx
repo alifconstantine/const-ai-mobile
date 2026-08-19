@@ -294,7 +294,9 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         Boolean(apiKeys.gemini || apiKeys.anthropic || apiKeys.openAi || apiKeys.openRouter);
 
       let resolvedModel = liveUserConfig.activeModel || "";
-      if (!resolvedModel) {
+      if (!hasAnyProvider) {
+        resolvedModel = "";
+      } else if (!resolvedModel) {
         const firstProvWithModels = customProvs.find(
           (p: any) => p.isActive !== false && p.models?.length > 0
         );
@@ -306,8 +308,10 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
           resolvedModel = "claude-3-7-sonnet";
         } else if (apiKeys.openAi) {
           resolvedModel = "gpt-4o";
+        } else if (apiKeys.openRouter) {
+          resolvedModel = "openrouter/anthropic/claude-3.7-sonnet";
         } else {
-          resolvedModel = "Const";
+          resolvedModel = "";
         }
       }
 

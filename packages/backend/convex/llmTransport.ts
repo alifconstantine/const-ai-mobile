@@ -83,7 +83,7 @@ export async function executeLLMCompletion(
     tools = [],
   } = options;
 
-  if (!apiKey) {
+  if (provider !== "custom_openai" && !apiKey) {
     throw new Error(
       `No API key configured for provider "${provider}". Please configure your API key in Settings.`
     );
