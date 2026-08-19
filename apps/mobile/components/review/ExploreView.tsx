@@ -30,35 +30,63 @@ interface ExplorerNode {
 
 const FILE_TREE: ExplorerNode[] = [
   {
-    id: "app-folder",
-    name: "app",
+    id: "apps-folder",
+    name: "apps",
     isFolder: true,
     children: [
-      { id: "f-layout", name: "_layout.tsx", isFolder: false, type: "code" },
-      { id: "f-index", name: "index.tsx", isFolder: false, type: "code" },
+      {
+        id: "mobile-folder",
+        name: "mobile",
+        isFolder: true,
+        children: [
+          { id: "f-m-layout", name: "app/_layout.tsx", isFolder: false, type: "code" },
+          { id: "f-m-index", name: "app/index.tsx", isFolder: false, type: "code" },
+          { id: "f-m-nav", name: "context/NavigationContext.tsx", isFolder: false, type: "code" },
+          { id: "f-m-package", name: "package.json", isFolder: false, type: "json" },
+        ],
+      },
+      {
+        id: "web-folder",
+        name: "web",
+        isFolder: true,
+        children: [
+          { id: "f-w-page", name: "app/page.tsx", isFolder: false, type: "code" },
+          { id: "f-w-dash", name: "app/dashboard/page.tsx", isFolder: false, type: "code" },
+          { id: "f-w-settings", name: "app/dashboard/settings/page.tsx", isFolder: false, type: "code" },
+        ],
+      },
     ],
   },
   {
-    id: "components-folder",
-    name: "components",
+    id: "packages-folder",
+    name: "packages",
     isFolder: true,
     children: [
-      { id: "f-header", name: "HeaderBar.tsx", isFolder: false, type: "code" },
-      { id: "f-taskdrawer", name: "TaskDrawer.tsx", isFolder: false, type: "code" },
-      { id: "f-diff", name: "CodeDiffView.tsx", isFolder: false, type: "code" },
+      {
+        id: "backend-folder",
+        name: "backend",
+        isFolder: true,
+        children: [
+          { id: "f-b-agent", name: "convex/agent.ts", isFolder: false, type: "code" },
+          { id: "f-b-users", name: "convex/users.ts", isFolder: false, type: "code" },
+          { id: "f-b-schema", name: "convex/schema.ts", isFolder: false, type: "code" },
+        ],
+      },
+      {
+        id: "types-folder",
+        name: "types",
+        isFolder: true,
+        children: [
+          { id: "f-t-index", name: "src/index.ts", isFolder: false, type: "code" },
+        ],
+      },
     ],
   },
   {
-    id: "f-server",
-    name: "server.js",
+    id: "f-arch",
+    name: "ARCHITECTURE.md",
     isFolder: false,
-    type: "code",
-  },
-  {
-    id: "f-index-html",
-    name: "index.html",
-    isFolder: false,
-    type: "web",
+    type: "text",
   },
   {
     id: "f-package",
@@ -67,10 +95,10 @@ const FILE_TREE: ExplorerNode[] = [
     type: "json",
   },
   {
-    id: "f-readme",
-    name: "README.md",
+    id: "f-turbo",
+    name: "turbo.json",
     isFolder: false,
-    type: "text",
+    type: "json",
   },
 ];
 

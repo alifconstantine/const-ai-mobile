@@ -139,14 +139,17 @@ export const SettingsModal: React.FC = () => {
     setIsSavingSettings(true);
     setSettingsSaveSuccess(false);
     try {
+      const keysPayload: Record<string, string> = {};
+      if (selectedProvider === "gemini") keysPayload.gemini = apiKeyInput.trim();
+      else if (selectedProvider === "anthropic") keysPayload.anthropic = apiKeyInput.trim();
+      else if (selectedProvider === "openrouter") keysPayload.openRouter = apiKeyInput.trim();
+      else keysPayload.openAi = apiKeyInput.trim();
+
       await updateUserSettings({
         activeModel,
         provider: selectedProvider,
         customBaseUrl: baseUrlInput.trim(),
-        customApiKeys: {
-          openAi: apiKeyInput.trim(),
-          openRouter: apiKeyInput.trim(),
-        },
+        customApiKeys: keysPayload,
         operatingMode: activeOperatingMode,
       });
       setSettingsSaveSuccess(true);
@@ -183,7 +186,7 @@ export const SettingsModal: React.FC = () => {
 
     if (userConfig?.customProviders) {
       for (const prov of userConfig.customProviders) {
-        if (prov.models) {
+        if (prov.isActive !== false && prov.models) {
           for (const m of prov.models) {
             if (m.id && !seen.has(m.id)) {
               seen.add(m.id);
@@ -198,6 +201,36 @@ export const SettingsModal: React.FC = () => {
       }
     }
 
+    const keys = userConfig?.customApiKeys;
+
+    if (keys?.gemini && keys.gemini.trim().length > 0) {
+      if (!seen.has("gemini-2.0-flash")) {
+        seen.add("gemini-2.0-flash");
+        list.push({ id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", badge: "Google" });
+      }
+    }
+
+    if (keys?.anthropic && keys.anthropic.trim().length > 0) {
+      if (!seen.has("claude-3-7-sonnet")) {
+        seen.add("claude-3-7-sonnet");
+        list.push({ id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", badge: "Anthropic" });
+      }
+    }
+
+    if (keys?.openAi && keys.openAi.trim().length > 0) {
+      if (!seen.has("gpt-4o")) {
+        seen.add("gpt-4o");
+        list.push({ id: "gpt-4o", name: "GPT-4o", badge: "OpenAI" });
+      }
+    }
+
+    if (keys?.openRouter && keys.openRouter.trim().length > 0) {
+      if (!seen.has("deepseek/deepseek-r1")) {
+        seen.add("deepseek/deepseek-r1");
+        list.push({ id: "deepseek/deepseek-r1", name: "DeepSeek R1", badge: "OpenRouter" });
+      }
+    }
+
     if (activeModel && !seen.has(activeModel)) {
       list.unshift({
         id: activeModel,
@@ -208,7 +241,7 @@ export const SettingsModal: React.FC = () => {
     }
 
     if (list.length === 0) {
-      list.push({ id: "Const", name: "Const", badge: "Fast" });
+      list.push({ id: "Const", name: "Const", badge: "Platform" });
     }
 
     return list;

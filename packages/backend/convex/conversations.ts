@@ -7,14 +7,12 @@ export const listConversations = query({
   handler: async (ctx, args) => {
     let targetUserId: Id<"users"> | null = null;
 
-    if (args.userId) {
-      if (typeof args.userId === "string" && !args.userId.startsWith("user_")) {
-        try {
-          const userDoc = await ctx.db.get(args.userId as Id<"users">);
-          if (userDoc) targetUserId = userDoc._id;
-        } catch {
-          // not a direct Convex ID
-        }
+    if (args.userId && typeof args.userId === "string") {
+      try {
+        const userDoc = await ctx.db.get(args.userId as Id<"users">);
+        if (userDoc) targetUserId = userDoc._id;
+      } catch {
+        // not a direct Convex ID
       }
     }
 
@@ -26,6 +24,13 @@ export const listConversations = query({
           .withIndex("email", (q) => q.eq("email", identity.email))
           .first();
         if (user) targetUserId = user._id;
+      }
+    }
+
+    if (!targetUserId) {
+      const defaultUser = await ctx.db.query("users").first();
+      if (defaultUser) {
+        targetUserId = defaultUser._id;
       }
     }
 
@@ -64,7 +69,7 @@ export const createConversation = mutation({
   handler: async (ctx, args) => {
     let targetUserId: Id<"users"> | null = null;
 
-    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+    if (args.userId && typeof args.userId === "string") {
       try {
         const userDoc = await ctx.db.get(args.userId as Id<"users">);
         if (userDoc) targetUserId = userDoc._id;

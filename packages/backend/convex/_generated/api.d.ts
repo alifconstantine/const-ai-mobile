@@ -12,6 +12,7 @@ import type * as agent from "../agent.js";
 import type * as auth from "../auth.js";
 import type * as conversations from "../conversations.js";
 import type * as http from "../http.js";
+import type * as implementationPlans from "../implementationPlans.js";
 import type * as llmTransport from "../llmTransport.js";
 import type * as messages from "../messages.js";
 import type * as pendingActions from "../pendingActions.js";
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   conversations: typeof conversations;
   http: typeof http;
+  implementationPlans: typeof implementationPlans;
   llmTransport: typeof llmTransport;
   messages: typeof messages;
   pendingActions: typeof pendingActions;

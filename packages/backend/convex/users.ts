@@ -28,7 +28,7 @@ export const viewer = query({
 
         return {
           ...user,
-          config,
+          config: sanitizeUserConfig(config),
         };
       }
 
@@ -57,12 +57,26 @@ export const viewer = query({
 
           return {
             ...user,
-            config,
+            config: sanitizeUserConfig(config),
           };
         }
       }
     } catch {
       // ignore
+    }
+
+    // 3. Fallback to default user & config for local / single-tenant workspace
+    const defaultUser = await ctx.db.query("users").first();
+    if (defaultUser) {
+      const config = await ctx.db
+        .query("userConfigs")
+        .withIndex("by_user", (q) => q.eq("userId", defaultUser._id))
+        .first();
+
+      return {
+        ...defaultUser,
+        config: sanitizeUserConfig(config),
+      };
     }
 
     return null;
@@ -119,6 +133,40 @@ export const updateProfile = mutation({
   },
 });
 
+function sanitizeUserConfig(config: any) {
+  if (!config) return config;
+  const isDummy = (k?: string) => !k || k.startsWith("sk-7852144") || k === "demo_key";
+  const customApiKeys = {
+    gemini: isDummy(config.customApiKeys?.gemini) ? "" : config.customApiKeys.gemini,
+    anthropic: isDummy(config.customApiKeys?.anthropic) ? "" : config.customApiKeys.anthropic,
+    openAi: isDummy(config.customApiKeys?.openAi) ? "" : config.customApiKeys.openAi,
+    openRouter: isDummy(config.customApiKeys?.openRouter) ? "" : config.customApiKeys.openRouter,
+  };
+  const customProviders = (config.customProviders || []).map((p: any) => ({
+    ...p,
+    apiKey: isDummy(p.apiKey) ? "" : p.apiKey,
+  }));
+  return {
+    ...config,
+    customApiKeys,
+    customProviders,
+  };
+}
+
+const DEFAULT_CUSTOM_PROVIDERS = [
+  {
+    id: "omniroute",
+    name: "OmniRoute",
+    baseUrl: "http://localhost:20128/v1",
+    apiKey: "",
+    apiFormat: "openai_completions",
+    isActive: true,
+    models: [
+      { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
+    ],
+  },
+];
+
 export const getOrCreateDefaultUser = mutation({
   args: {
     email: v.optional(v.string()),
@@ -164,14 +212,14 @@ export const getOrCreateDefaultUser = mutation({
         activeModel: "Const",
         operatingMode: "ask_before_change",
         provider: "custom_openai",
-        customBaseUrl:
-          (typeof process !== "undefined" &&
-            process.env.CUSTOM_LLM_BASE_URL) ||
-          "",
+        customBaseUrl: "http://localhost:20128/v1",
         customApiKeys: {
           openAi: "",
           openRouter: "",
+          gemini: "",
+          anthropic: "",
         },
+        customProviders: DEFAULT_CUSTOM_PROVIDERS,
         sessionSpendCapUsd: 50.0,
         systemPersona: "Senior Autonomous AI Mobile System Operator",
         timezone: "Asia/Jakarta",
@@ -186,18 +234,15 @@ export const getOrCreateDefaultUser = mutation({
       });
       config = await ctx.db.get(configId);
     } else if (config.customBaseUrl?.includes("/response")) {
-      const defaultUrl =
-        (typeof process !== "undefined" && process.env.CUSTOM_LLM_BASE_URL) ||
-        "";
       await ctx.db.patch(config._id, {
-        customBaseUrl: defaultUrl,
+        customBaseUrl: "http://localhost:20128/v1",
       });
       config = await ctx.db.get(config._id);
     }
 
     return {
       user,
-      config,
+      config: sanitizeUserConfig(config),
     };
   },
 });
@@ -206,7 +251,7 @@ export const getUserConfig = query({
   args: { userId: v.optional(v.union(v.id("users"), v.string())) },
   handler: async (ctx, args) => {
     let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+    if (args.userId && typeof args.userId === "string") {
       try {
         const userDoc = await ctx.db.get(args.userId as Id<"users">);
         if (userDoc) targetUserId = userDoc._id;
@@ -225,12 +270,17 @@ export const getUserConfig = query({
       }
     }
     if (!targetUserId) {
+      const defaultUser = await ctx.db.query("users").first();
+      if (defaultUser) targetUserId = defaultUser._id;
+    }
+    if (!targetUserId) {
       return null;
     }
-    return await ctx.db
+    const config = await ctx.db
       .query("userConfigs")
       .withIndex("by_user", (q) => q.eq("userId", targetUserId))
       .first();
+    return sanitizeUserConfig(config);
   },
 });
 
@@ -270,16 +320,30 @@ export const updateUserConfig = mutation({
               id: v.string(),
               name: v.string(),
               contextLength: v.optional(v.number()),
+              contextWindow: v.optional(v.number()),
               supportsTools: v.optional(v.boolean()),
             })
           ),
         })
       )
     ),
+    sessionSpendCapUsd: v.optional(v.number()),
+    systemPersona: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    temperature: v.optional(v.number()),
+    voiceSettings: v.optional(
+      v.object({
+        ttsEngine: v.optional(v.union(v.literal("local_supertonic"), v.literal("cloud_fallback"))),
+        selectedVoiceStyle: v.optional(v.string()),
+        speakingRate: v.optional(v.number()),
+        enableEmotionTags: v.optional(v.boolean()),
+        autoPlayVoiceResponse: v.optional(v.boolean()),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
+    if (args.userId && typeof args.userId === "string") {
       try {
         const userDoc = await ctx.db.get(args.userId as Id<"users">);
         if (userDoc) targetUserId = userDoc._id;
@@ -297,30 +361,74 @@ export const updateUserConfig = mutation({
         if (user) targetUserId = user._id;
       }
     }
-    if (!targetUserId) return null;
+    if (!targetUserId) {
+      const defaultUser = await ctx.db.query("users").first();
+      if (defaultUser) targetUserId = defaultUser._id;
+    }
+    if (!targetUserId) {
+      targetUserId = await ctx.db.insert("users", {
+        email: "operator@constai.platform",
+        name: "Operator",
+        subscriptionStatus: "active",
+        createdAt: Date.now(),
+      });
+    }
 
     const config = await ctx.db
       .query("userConfigs")
       .withIndex("by_user", (q) => q.eq("userId", targetUserId))
       .first();
 
-    if (!config) return null;
-
     const patchPayload: Record<string, unknown> = {};
     if (args.activeModel !== undefined) patchPayload.activeModel = args.activeModel;
     if (args.operatingMode !== undefined) patchPayload.operatingMode = args.operatingMode;
     if (args.provider !== undefined) patchPayload.provider = args.provider;
     if (args.customBaseUrl !== undefined) patchPayload.customBaseUrl = args.customBaseUrl;
-    if (args.customProviders !== undefined) patchPayload.customProviders = args.customProviders;
     if (args.customApiKeys !== undefined) {
       patchPayload.customApiKeys = {
-        ...config.customApiKeys,
-        ...args.customApiKeys,
+        gemini: args.customApiKeys.gemini ?? "",
+        anthropic: args.customApiKeys.anthropic ?? "",
+        openAi: args.customApiKeys.openAi ?? "",
+        openRouter: args.customApiKeys.openRouter ?? "",
       };
+    }
+    if (args.customProviders !== undefined) patchPayload.customProviders = args.customProviders;
+    if (args.sessionSpendCapUsd !== undefined)
+      patchPayload.sessionSpendCapUsd = args.sessionSpendCapUsd;
+    if (args.systemPersona !== undefined) patchPayload.systemPersona = args.systemPersona;
+    if (args.timezone !== undefined) patchPayload.timezone = args.timezone;
+    if (args.temperature !== undefined) patchPayload.temperature = args.temperature;
+    if (args.voiceSettings !== undefined) patchPayload.voiceSettings = args.voiceSettings;
+
+    if (!config) {
+      const configId = await ctx.db.insert("userConfigs", {
+        userId: targetUserId,
+        inferenceMode: "byok",
+        activeModel: (args.activeModel as string) || "Const",
+        operatingMode: (args.operatingMode as any) || "ask_before_change",
+        provider: args.provider || "custom_openai",
+        customBaseUrl: args.customBaseUrl || "http://localhost:20128/v1",
+        customApiKeys: (args.customApiKeys as any) || {},
+        customProviders: (args.customProviders as any) || DEFAULT_CUSTOM_PROVIDERS,
+        sessionSpendCapUsd: 50.0,
+        systemPersona: "Senior Autonomous AI Mobile System Operator",
+        timezone: "Asia/Jakarta",
+        temperature: 0.7,
+        voiceSettings: {
+          ttsEngine: "local_supertonic",
+          selectedVoiceStyle: "M1",
+          speakingRate: 1.0,
+          enableEmotionTags: true,
+          autoPlayVoiceResponse: false,
+        },
+      });
+      const res = await ctx.db.get(configId);
+      return sanitizeUserConfig(res);
     }
 
     await ctx.db.patch(config._id, patchPayload);
-    return await ctx.db.get(config._id);
+    const updated = await ctx.db.get(config._id);
+    return sanitizeUserConfig(updated);
   },
 });
 
@@ -391,14 +499,14 @@ export const syncClerkUser = mutation({
         activeModel: "Const",
         operatingMode: "ask_before_change",
         provider: "custom_openai",
-        customBaseUrl:
-          (typeof process !== "undefined" &&
-            process.env.CUSTOM_LLM_BASE_URL) ||
-          "",
+        customBaseUrl: "http://localhost:20128/v1",
         customApiKeys: {
           openAi: "",
           openRouter: "",
+          gemini: "",
+          anthropic: "",
         },
+        customProviders: DEFAULT_CUSTOM_PROVIDERS,
         sessionSpendCapUsd: 50.0,
         systemPersona: "Senior Autonomous AI Mobile System Operator",
         timezone: "Asia/Jakarta",
@@ -416,8 +524,60 @@ export const syncClerkUser = mutation({
 
     return {
       user,
-      config,
+      config: sanitizeUserConfig(config),
     };
+  },
+});
+
+export const resetAllProviders = mutation({
+  args: {
+    userId: v.optional(v.union(v.id("users"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    let targetUserId: Id<"users"> | null = null;
+    if (args.userId && typeof args.userId === "string") {
+      try {
+        const userDoc = await ctx.db.get(args.userId as Id<"users">);
+        if (userDoc) targetUserId = userDoc._id;
+      } catch {
+        // ignore
+      }
+    }
+    if (!targetUserId) {
+      const identity = await ctx.auth.getUserIdentity();
+      if (identity?.email) {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", identity.email))
+          .first();
+        if (user) targetUserId = user._id;
+      }
+    }
+    if (!targetUserId) {
+      const defaultUser = await ctx.db.query("users").first();
+      if (defaultUser) targetUserId = defaultUser._id;
+    }
+    if (!targetUserId) return null;
+
+    const config = await ctx.db
+      .query("userConfigs")
+      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .first();
+
+    if (config) {
+      await ctx.db.patch(config._id, {
+        customApiKeys: {
+          gemini: "",
+          anthropic: "",
+          openAi: "",
+          openRouter: "",
+        },
+        customProviders: [],
+        activeModel: "Const",
+      });
+      return await ctx.db.get(config._id);
+    }
+    return null;
   },
 });
 

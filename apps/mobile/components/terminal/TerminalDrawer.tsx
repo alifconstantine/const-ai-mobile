@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { useNavigation } from "../../context/NavigationContext";
+import { TermuxBridge } from "../../services/termux/TermuxBridge";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const DRAWER_HEIGHT = Math.min(SCREEN_HEIGHT * 0.45, 340);
@@ -26,14 +27,10 @@ export const TerminalDrawer: React.FC = () => {
   const { isTerminalOpen, setTerminalOpen } = useNavigation();
   const [commandInput, setCommandInput] = useState("");
   const [history, setHistory] = useState<string[]>([
-    "Windows PowerShell",
-    "Copyright (C) Microsoft Corporation. All rights reserved.",
+    "Const AI Terminal — On-Device Environment",
+    "Connected to Linux Termux / ADB Bridge",
     "",
-    "Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows",
-    "",
-    "PS C:\\Users\\AlifConstantine\\.zcode\\workspace\\default> node server.js",
-    "Server running at http://localhost:8000/",
-    "[200 OK] GET / (1.2ms)",
+    "Ready for commands (e.g. ls, pwd, git, node, python)...",
   ]);
 
   const slideAnim = useRef(new Animated.Value(DRAWER_HEIGHT)).current;
@@ -69,16 +66,33 @@ export const TerminalDrawer: React.FC = () => {
     }
   }, [isTerminalOpen]);
 
-  const handleRunCommand = () => {
+  const handleRunCommand = async () => {
     if (!commandInput.trim()) return;
     const cmd = commandInput.trim();
-    setHistory((prev) => [
-      ...prev,
-      `PS C:\\Users\\AlifConstantine\\.zcode\\workspace\\default> ${cmd}`,
-      `Executing '${cmd}'...`,
-      `[Done with exit code 0]`,
-    ]);
     setCommandInput("");
+    setHistory((prev) => [...prev, `$ ${cmd}`]);
+
+    if (cmd === "clear" || cmd === "cls") {
+      setHistory([]);
+      return;
+    }
+
+    try {
+      const result = await TermuxBridge.executeScript(cmd);
+      const outputText = result.stdout || result.output || result.stderr || "";
+      const lines = outputText.split("\n").filter((l) => l.length > 0);
+      setHistory((prev) => [
+        ...prev,
+        ...lines,
+        `[Process exited with code ${result.exitCode} in ${result.durationMs || 10}ms]`,
+      ]);
+    } catch (err: any) {
+      setHistory((prev) => [
+        ...prev,
+        `Error: ${err?.message || String(err)}`,
+        `[Process exited with code 1]`,
+      ]);
+    }
   };
 
   if (!isTerminalOpen) {

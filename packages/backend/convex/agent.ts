@@ -99,6 +99,8 @@ export const sendMessage = action({
       provider = "anthropic";
     } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
       provider = "openai";
+    } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
+      provider = "openrouter";
     } else if (userConfig?.provider) {
       provider = userConfig.provider as LLMProviderType;
     } else {
@@ -109,23 +111,9 @@ export const sendMessage = action({
       args.customBaseUrlOverride ||
       matchedBaseUrl ||
       userConfig?.customBaseUrl ||
-      (typeof process !== "undefined" && process.env.CUSTOM_LLM_BASE_URL) ||
       "http://localhost:20128/v1";
 
-    // Resolve API key by provider preference, custom provider config & environment variables
-    const envKey =
-      (typeof process !== "undefined" &&
-        (provider === "openrouter"
-          ? process.env.OPENROUTER_API_KEY
-          : provider === "gemini"
-          ? process.env.GEMINI_API_KEY
-          : provider === "anthropic"
-          ? process.env.ANTHROPIC_API_KEY
-          : process.env.CUSTOM_LLM_API_KEY ||
-            process.env.OPENAI_API_KEY ||
-            process.env.OPENROUTER_API_KEY)) ||
-      "";
-
+    // Resolve API key strictly from database user config / custom provider (No server process.env fallback)
     const apiKey =
       args.customApiKeyOverride ||
       matchedApiKey ||
@@ -135,9 +123,24 @@ export const sendMessage = action({
         ? userConfig?.customApiKeys?.anthropic
         : provider === "openrouter"
         ? userConfig?.customApiKeys?.openRouter
-        : userConfig?.customApiKeys?.openAi || userConfig?.customApiKeys?.openRouter) ||
-      envKey ||
-      "sk-7852144cf1690e4d-297ffa-3396d47a";
+        : provider === "openai"
+        ? userConfig?.customApiKeys?.openAi
+        : "") ||
+      "";
+
+    if (provider !== "custom_openai" && !apiKey) {
+      const providerLabel =
+        provider === "gemini"
+          ? "Google Gemini"
+          : provider === "anthropic"
+          ? "Anthropic Claude"
+          : provider === "openai"
+          ? "OpenAI"
+          : "OpenRouter";
+      throw new Error(
+        `API Key untuk ${providerLabel} belum dikonfigurasi di akun Anda. Silakan masukkan API Key Anda di menu Settings.`
+      );
+    }
 
     // 3. Build System Prompt & Canonical Messages Array
     const systemPrompt = buildSystemPrompt({
@@ -311,21 +314,88 @@ export const submitToolResult = action({
       conversationId: args.conversationId,
     });
 
-    const activeModel = "google/gemini-2.0-flash-001";
+    // Fetch user config to resolve active model and provider
+    const userConfig = await ctx.runQuery(api.users.getUserConfig, {
+      userId: args.userId,
+    });
+
+    const operatingMode: OperatingMode =
+      userConfig?.operatingMode || "ask_before_change";
+
+    // Find the last assistant modelUsed if available
+    const lastAssistantMsg = [...history].reverse().find((m: any) => m.role === "assistant" && m.modelUsed);
+    const rawModel = lastAssistantMsg?.modelUsed || userConfig?.activeModel || "Const";
+    const activeModel = rawModel.split(" (")[0].trim();
+
+    // Check if the requested model belongs to any custom provider
+    const customProvidersList = userConfig?.customProviders || [];
+    const matchedCustomProvider = customProvidersList.find((p: any) =>
+      p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
+    ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
+
+    let provider: LLMProviderType = "custom_openai";
+    let matchedBaseUrl = "";
+    let matchedApiKey = "";
+
+    if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
+      provider = "custom_openai";
+      matchedBaseUrl = matchedCustomProvider.baseUrl || "";
+      matchedApiKey = matchedCustomProvider.apiKey || "";
+    } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
+      provider = "gemini";
+    } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
+      provider = "anthropic";
+    } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
+      provider = "openai";
+    } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
+      provider = "openrouter";
+    } else if (userConfig?.provider) {
+      provider = userConfig.provider as LLMProviderType;
+    } else {
+      provider = "custom_openai";
+    }
+
+    const customBaseUrl =
+      matchedBaseUrl ||
+      userConfig?.customBaseUrl ||
+      "http://localhost:20128/v1";
+
     const apiKey =
-      (typeof process !== "undefined" &&
-        (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY)) ||
-      "demo_key";
+      matchedApiKey ||
+      (provider === "gemini"
+        ? userConfig?.customApiKeys?.gemini
+        : provider === "anthropic"
+        ? userConfig?.customApiKeys?.anthropic
+        : provider === "openrouter"
+        ? userConfig?.customApiKeys?.openRouter
+        : provider === "openai"
+        ? userConfig?.customApiKeys?.openAi
+        : "") ||
+      "";
+
+    if (provider !== "custom_openai" && !apiKey) {
+      const providerLabel =
+        provider === "gemini"
+          ? "Google Gemini"
+          : provider === "anthropic"
+          ? "Anthropic Claude"
+          : provider === "openai"
+          ? "OpenAI"
+          : "OpenRouter";
+      throw new Error(
+        `API Key untuk ${providerLabel} belum dikonfigurasi di akun Anda. Silakan masukkan API Key Anda di menu Settings.`
+      );
+    }
 
     const systemPrompt = buildSystemPrompt({
-      operatingMode: "ask_before_change",
+      operatingMode,
       activeModel,
       platform: "android",
     });
 
     const messages: LLMMessage[] = [
       { role: "system", content: systemPrompt },
-      ...history.slice(-15).map((m: { role: string; content: string }) => ({
+      ...history.slice(-15).map((m: { role: string; content: string; toolCalls?: any }) => ({
         role: m.role as "system" | "user" | "assistant" | "tool",
         content: m.content,
         tool_call_id: m.role === "tool" ? args.toolCallId : undefined,
@@ -334,8 +404,9 @@ export const submitToolResult = action({
 
     // 4. Continue generation to summarize tool result for user
     const continuation = await executeLLMCompletion(messages, {
-      provider: "openrouter",
+      provider,
       model: activeModel,
+      customBaseUrl,
       apiKey,
       tools: CONST_DEVICE_TOOLS,
     });
@@ -391,13 +462,23 @@ export const testModelEndpoint = action({
   },
   handler: async (_ctx, args) => {
     const startTime = Date.now();
+    const apiKey = args.apiKey || "";
+
+    if (args.provider !== "custom_openai" && !apiKey) {
+      return {
+        success: false,
+        latencyMs: 0,
+        error: "API Key belum diisi. Silakan masukkan API Key untuk menguji model ini.",
+      };
+    }
+
     try {
       const response = await executeLLMCompletion(
         [{ role: "user", content: "Ping! Respond with 'pong' if you receive this." }],
         {
           provider: args.provider as LLMProviderType,
           model: args.model,
-          apiKey: args.apiKey || "demo_key",
+          apiKey,
           customBaseUrl: args.customBaseUrl,
           maxTokens: 50,
           temperature: 0.1,

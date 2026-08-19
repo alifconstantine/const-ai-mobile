@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,11 @@ import {
   ExternalLink,
   ChevronDown,
   FileText,
+  CheckCircle2,
 } from "lucide-react-native";
+import { useQuery } from "convex/react";
+import { api } from "@const-ai/backend";
+import { useNavigation } from "../../context/NavigationContext";
 
 interface DiffLine {
   lineNum: number;
@@ -22,53 +26,61 @@ interface DiffLine {
   content: string;
 }
 
-const SAMPLE_DIFF: DiffLine[] = [
-  { lineNum: 1, type: "add", content: "const http = require('http');" },
-  { lineNum: 2, type: "add", content: "const fs = require('fs');" },
-  { lineNum: 3, type: "add", content: "const path = require('path');" },
-  { lineNum: 4, type: "normal", content: "" },
-  { lineNum: 5, type: "add", content: "const PORT = 8000;" },
-  { lineNum: 6, type: "add", content: "const MIME = {" },
-  { lineNum: 7, type: "add", content: "  '.html': 'text/html'," },
-  { lineNum: 8, type: "add", content: "  '.css': 'text/css'," },
-  { lineNum: 9, type: "add", content: "  '.js': 'application/javascript'," },
-  { lineNum: 10, type: "add", content: "  '.json': 'application/json'," },
-  { lineNum: 11, type: "add", content: "  '.mp3': 'audio/mpeg'," },
-  { lineNum: 12, type: "add", content: "  '.opus': 'audio/opus'," },
-  { lineNum: 13, type: "add", content: "  '.ogg': 'audio/ogg'," },
-  { lineNum: 14, type: "add", content: "  '.png': 'image/png'" },
-  { lineNum: 15, type: "add", content: "};" },
-  { lineNum: 16, type: "normal", content: "" },
-  { lineNum: 17, type: "add", content: "const server = http.createServer((req, res) => {" },
-  { lineNum: 18, type: "add", content: "  let filePath = '.' + req.url.split('?')[0];" },
-  { lineNum: 19, type: "add", content: "  if (filePath === './') filePath = './index.html';" },
-  { lineNum: 20, type: "normal", content: "" },
-  { lineNum: 21, type: "add", content: "  const ext = path.extname(filePath);" },
-  { lineNum: 22, type: "add", content: "  const contentType = MIME[ext] || 'application/octet-stream';" },
-  { lineNum: 23, type: "normal", content: "" },
-  { lineNum: 24, type: "add", content: "  fs.readFile(filePath, (err, content) => {" },
-  { lineNum: 25, type: "add", content: "    if (err) {" },
-  { lineNum: 26, type: "add", content: "      if (err.code === 'ENOENT') {" },
-  { lineNum: 27, type: "add", content: "        res.writeHead(404, { 'Content-Type': 'text/plain' });" },
-  { lineNum: 28, type: "add", content: "        res.end('404 Not Found');" },
-  { lineNum: 29, type: "add", content: "      } else {" },
-  { lineNum: 30, type: "add", content: "        res.writeHead(500, { 'Content-Type': 'text/plain' });" },
-  { lineNum: 31, type: "add", content: "        res.end('500 Internal Error');" },
-  { lineNum: 32, type: "add", content: "      }" },
-  { lineNum: 33, type: "add", content: "    } else {" },
-  { lineNum: 34, type: "add", content: "      res.writeHead(200, { 'Content-Type': contentType });" },
-  { lineNum: 35, type: "add", content: "      res.end(content, 'utf-8');" },
-  { lineNum: 36, type: "add", content: "    }" },
-  { lineNum: 37, type: "add", content: "  });" },
-  { lineNum: 38, type: "add", content: "});" },
-  { lineNum: 39, type: "normal", content: "" },
-  { lineNum: 40, type: "add", content: "server.listen(PORT, () => {" },
-  { lineNum: 41, type: "add", content: "  console.log(`Server running at http://localhost:${PORT}/`);" },
-  { lineNum: 42, type: "add", content: "});" },
-];
-
 export const CodeDiffView: React.FC = () => {
   const [isReviewed, setIsReviewed] = useState(false);
+  const { activeConversationId } = useNavigation();
+
+  const pendingActions = useQuery(
+    (api as any).pendingActions?.listPendingByConversation,
+    activeConversationId ? { conversationId: activeConversationId as any } : "skip"
+  );
+
+  const activeAction = useMemo(() => {
+    if (!pendingActions || pendingActions.length === 0) return null;
+    return pendingActions.find((a: any) => a.diffContent || a.command) || pendingActions[0];
+  }, [pendingActions]);
+
+  const { diffLines, fileName, adds, dels } = useMemo(() => {
+    if (!activeAction?.diffContent) {
+      return { diffLines: [], fileName: "", adds: 0, dels: 0 };
+    }
+    const lines = activeAction.diffContent.split("\n");
+    let addCount = 0;
+    let delCount = 0;
+    const parsed: DiffLine[] = lines.map((l: string, idx: number) => {
+      let type: "add" | "delete" | "normal" = "normal";
+      if (l.startsWith("+")) {
+        type = "add";
+        addCount++;
+      } else if (l.startsWith("-")) {
+        type = "delete";
+        delCount++;
+      }
+      return {
+        lineNum: idx + 1,
+        type,
+        content: l,
+      };
+    });
+    return {
+      diffLines: parsed,
+      fileName: activeAction.command || "modified_file",
+      adds: addCount,
+      dels: delCount,
+    };
+  }, [activeAction]);
+
+  if (!activeAction || diffLines.length === 0) {
+    return (
+      <View style={[styles.container, styles.emptyContainer]}>
+        <CheckCircle2 size={32} color="#22c55e" />
+        <Text style={styles.emptyTitle}>Working Tree Clean</Text>
+        <Text style={styles.emptySubtitle}>
+          No pending code diffs or file modifications awaiting review.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -76,12 +88,12 @@ export const CodeDiffView: React.FC = () => {
       <View style={styles.headerBar}>
         <View style={styles.fileInfo}>
           <View style={styles.fileIconBadge}>
-            <Text style={styles.jsBadge}>JS</Text>
+            <FileCode size={12} color="#000" />
           </View>
-          <Text style={styles.fileName}>server.js</Text>
+          <Text style={styles.fileName}>{fileName}</Text>
           <View style={styles.diffPill}>
-            <Text style={styles.diffAdd}>+42</Text>
-            <Text style={styles.diffDel}>-0</Text>
+            <Text style={styles.diffAdd}>+{adds}</Text>
+            <Text style={styles.diffDel}>-{dels}</Text>
           </View>
         </View>
 
@@ -96,14 +108,6 @@ export const CodeDiffView: React.FC = () => {
               <Text style={styles.btnReviewText}>Review</Text>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.btnOpen}>
-            <Text style={styles.btnOpenText}>Open</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.btnUndo}>
-            <Undo2 size={13} color="#a1a1aa" />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -115,7 +119,7 @@ export const CodeDiffView: React.FC = () => {
       >
         <ScrollView style={styles.verticalScroll} bounces={false}>
           <View style={styles.codeContainer}>
-            {SAMPLE_DIFF.map((line, index) => {
+            {diffLines.map((line, index) => {
               const isAdd = line.type === "add";
               const isDel = line.type === "delete";
 
@@ -302,5 +306,23 @@ const styles = StyleSheet.create({
   },
   lineCodeDel: {
     color: "#ffa198",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: "#fafafa",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  emptySubtitle: {
+    color: "#71717a",
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 16,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -22,7 +22,7 @@ import {
   Bot,
   Sparkles,
 } from "lucide-react-native";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@const-ai/backend";
 
 import { HeaderBar } from "../components/navigation/HeaderBar";
@@ -48,13 +48,20 @@ export default function HomeScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const [isSending, setIsSending] = useState(false);
+  const [optimisticUserMessage, setOptimisticUserMessage] = useState<{
+    content: string;
+    createdAt: number;
+  } | null>(null);
 
   const {
     currentUserId,
     currentUser,
+    userConfig,
     isAuthenticated,
     isAuthLoading,
     activeConversationId,
+    activeTaskTitle,
+    setActiveTaskTitle,
     activeModel,
     activeOperatingMode,
     setOperatingModeModalOpen,
@@ -85,17 +92,16 @@ export default function HomeScreen() {
       : "skip"
   );
 
-  // Send action dispatcher
+  // Send action dispatcher & update title mutation
   const sendMessageAction = useAction(api.agent.sendMessage);
+  const updateTitleMutation = useMutation(api.conversations.updateConversationTitle);
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages or optimistic message
   useEffect(() => {
-    if (messages && messages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages?.length]);
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [messages?.length, isSending, optimisticUserMessage]);
 
   const handlePromptChange = (text: string) => {
     setPromptInput(text);
@@ -112,20 +118,33 @@ export default function HomeScreen() {
 
     setPromptInput("");
     setIsSending(true);
+    setOptimisticUserMessage({ content: text, createdAt: Date.now() });
 
     try {
       let convId = activeConversationId;
+      const snippet = text.slice(0, 30) + (text.length > 30 ? "..." : "");
+
       if (!convId || convId.startsWith("local_")) {
-        const newTitle = text.slice(0, 30) + (text.length > 30 ? "..." : "");
-        const createdId = await createNewConversation(newTitle);
+        const createdId = await createNewConversation(snippet);
         if (createdId) {
           convId = createdId;
+        }
+      } else if (activeTaskTitle === "New Task") {
+        setActiveTaskTitle(snippet);
+        try {
+          await updateTitleMutation({
+            conversationId: convId as any,
+            title: snippet,
+          });
+        } catch {
+          // ignore
         }
       }
 
       if (!convId || convId.startsWith("local_")) {
         console.warn("No active conversation ID available for chat.");
         setIsSending(false);
+        setOptimisticUserMessage(null);
         return;
       }
 
@@ -142,6 +161,7 @@ export default function HomeScreen() {
       console.error("Error sending message:", err);
     } finally {
       setIsSending(false);
+      setOptimisticUserMessage(null);
     }
   };
 
@@ -173,6 +193,44 @@ export default function HomeScreen() {
     }
   };
 
+  const modelPillLabel = useMemo(() => {
+    const raw = activeModel || userConfig?.activeModel || "Const";
+
+    // 1. Search in custom providers
+    if (userConfig?.customProviders && userConfig.customProviders.length > 0) {
+      for (const prov of userConfig.customProviders) {
+        if (prov.isActive !== false && prov.models) {
+          const matched = prov.models.find(
+            (m: { id: string; name?: string }) => m.id === raw || m.name === raw
+          );
+          if (matched) {
+            return `${prov.name} / ${matched.name || matched.id}`;
+          }
+        }
+      }
+    }
+
+    // 2. Format standard cloud models
+    if (raw.toLowerCase().startsWith("gemini") || raw.toLowerCase().startsWith("google/")) {
+      const clean = raw.replace(/^google\//, "");
+      return `Gemini / ${clean === "gemini-2.0-flash" ? "2.0 Flash" : clean === "gemini-2.0-pro-exp-02-05" ? "2.0 Pro" : clean}`;
+    }
+    if (raw.toLowerCase().startsWith("claude") || raw.toLowerCase().startsWith("anthropic/")) {
+      const clean = raw.replace(/^anthropic\//, "");
+      return `Claude / ${clean === "claude-3-7-sonnet" ? "3.7 Sonnet" : clean === "claude-3-5-sonnet" ? "3.5 Sonnet" : clean}`;
+    }
+    if (raw.toLowerCase().startsWith("gpt") || raw.toLowerCase().startsWith("o3") || raw.toLowerCase().startsWith("o1")) {
+      return `OpenAI / ${raw === "gpt-4o" ? "GPT-4o" : raw === "gpt-4o-mini" ? "GPT-4o Mini" : raw}`;
+    }
+    if (raw.toLowerCase().startsWith("deepseek") || raw.toLowerCase().startsWith("openrouter/")) {
+      const clean = raw.replace(/^openrouter\//, "");
+      return `OpenRouter / ${clean}`;
+    }
+
+    if (raw === "Const") return "OmniRoute / Const";
+    return raw || "Select model";
+  }, [userConfig, activeModel]);
+
   if (isAuthLoading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
@@ -197,7 +255,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Welcome Banner when conversation is empty */}
-        {(!messages || messages.length === 0) && !isSending && (
+        {(!messages || messages.length === 0) && !optimisticUserMessage && !isSending && (
           <View style={styles.welcomeContainer}>
             <View style={styles.welcomeIconCircle}>
               <Bot size={28} color="#38bdf8" />
@@ -255,6 +313,24 @@ export default function HomeScreen() {
             onCopyPrompt={(txt) => setPromptInput(txt)}
           />
         ))}
+
+        {/* Optimistic User Prompt Bubble immediately rendered upon Send */}
+        {optimisticUserMessage &&
+          (!messages ||
+            !messages.some(
+              (m: any) =>
+                m.role === "user" && m.content === optimisticUserMessage.content
+            )) && (
+            <ChatMessageItem
+              key="optimistic_user_msg"
+              message={{
+                _id: "optimistic_temp_id",
+                role: "user",
+                content: optimisticUserMessage.content,
+                createdAt: optimisticUserMessage.createdAt,
+              }}
+            />
+          )}
 
         {/* Thinking Indicator while AI processes */}
         {isSending && <ThinkingIndicator />}
@@ -320,7 +396,7 @@ export default function HomeScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={styles.modelPillText} numberOfLines={1}>
-                  {activeModel}
+                  {modelPillLabel}
                 </Text>
                 <ChevronDown size={11} color="#a1a1aa" />
               </TouchableOpacity>

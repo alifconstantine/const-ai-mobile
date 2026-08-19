@@ -16,6 +16,23 @@ export const listPendingByDevice = query({
   },
 });
 
+export const listPendingByConversation = query({
+  args: {
+    conversationId: v.optional(v.union(v.id("conversations"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    if (!args.conversationId || args.conversationId.startsWith("local_")) return [];
+    try {
+      return await ctx.db
+        .query("pendingActions")
+        .filter((q) => q.eq(q.field("conversationId"), args.conversationId as any))
+        .collect();
+    } catch {
+      return [];
+    }
+  },
+});
+
 export const createPendingAction = mutation({
   args: {
     userId: v.optional(v.union(v.id("users"), v.string())),

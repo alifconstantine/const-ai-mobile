@@ -208,13 +208,14 @@ export const ReviewSidePanel: React.FC = () => {
               <View style={styles.browserNav}>
                 <RefreshCw size={13} color="#a1a1aa" />
                 <View style={styles.browserUrlBox}>
-                  <Text style={styles.browserUrl}>http://localhost:8000/</Text>
+                  <Text style={styles.browserUrl}>http://localhost:3000/</Text>
                 </View>
                 <ExternalLink size={14} color="#a1a1aa" />
               </View>
               <View style={styles.browserFrame}>
+                <Globe size={24} color="#38bdf8" />
                 <Text style={styles.browserPreviewText}>
-                  Preview Web App Running on Localhost:8000
+                  Web App Runner & Device Inspector Ready
                 </Text>
               </View>
             </View>
@@ -224,40 +225,27 @@ export const ReviewSidePanel: React.FC = () => {
             <View style={styles.sideChatContainer}>
               <View style={styles.sideChatHeader}>
                 <MessageSquare size={16} color="#38bdf8" />
-                <Text style={styles.sideChatTitle}>Side Thread</Text>
+                <Text style={styles.sideChatTitle}>Task Thread Notes</Text>
               </View>
-              <ScrollView style={styles.sideChatScroll}>
-                <View style={styles.sideBubble}>
-                  <Text style={styles.sideBubbleUser}>You</Text>
-                  <Text style={styles.sideBubbleText}>
-                    Tolong cek apakah port 8000 tidak konflik dengan Termux daemon?
-                  </Text>
-                </View>
-                <View style={styles.sideBubbleAssistant}>
-                  <Text style={styles.sideBubbleAi}>Const AI</Text>
-                  <Text style={styles.sideBubbleText}>
-                    Port 8000 bebas dan siap digunakan untuk serve file statis HTML/JS.
-                  </Text>
-                </View>
-              </ScrollView>
+              <View style={styles.sideEmptyBox}>
+                <Text style={styles.sideEmptyText}>
+                  Side discussion thread is synchronized with your active task.
+                </Text>
+              </View>
             </View>
           )}
 
           {activeReviewTab === "Terminal" && (
             <View style={styles.terminalContainer}>
               <View style={styles.terminalHeader}>
-                <Text style={styles.terminalTitle}>bash — local:8000</Text>
+                <Text style={styles.terminalTitle}>Termux / Shizuku ADB Process</Text>
               </View>
               <ScrollView style={styles.terminalBody}>
-                <Text style={styles.termLine}>$ node server.js</Text>
                 <Text style={styles.termSuccess}>
-                  Server running at http://localhost:8000/
+                  ● Connected to On-Device Runner Engine
                 </Text>
                 <Text style={styles.termLine}>
-                  [200 OK] GET /index.html (1.2ms)
-                </Text>
-                <Text style={styles.termLine}>
-                  [200 OK] GET /style.css (0.8ms)
+                  Session ID: default • Daemon Active
                 </Text>
               </ScrollView>
             </View>
@@ -476,5 +464,18 @@ const styles = StyleSheet.create({
     color: "#71717a",
     fontSize: 13,
     textAlign: "center",
+    marginTop: 10,
+  },
+  sideEmptyBox: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  sideEmptyText: {
+    color: "#71717a",
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

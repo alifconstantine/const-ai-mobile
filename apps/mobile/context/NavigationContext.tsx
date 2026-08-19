@@ -205,26 +205,11 @@ const NavigationContext = createContext<NavigationContextType | undefined>(
 );
 
 const INITIAL_WORKSPACES: WorkspaceItem[] = [
-  { id: "ws-1", name: "const-ai-mobile", path: "D:/code/platform/const-ai-mobile" },
-  { id: "ws-2", name: "Const Local Workspace", path: "local://workspace", isCurrent: true },
-  { id: "ws-3", name: "Gemini 2.0 Flash", path: "https://generativelanguage.googleapis.com" },
+  { id: "ws-1", name: "const-ai-mobile", path: "platform://const-ai-mobile", isCurrent: true },
+  { id: "ws-2", name: "default", path: "local://workspace/default" },
 ];
 
 const INITIAL_TABS: SideTabItem[] = [
-  {
-    id: "tab-file-server",
-    type: "File",
-    title: "server.js",
-    filename: "server.js",
-    isClosable: true,
-  },
-  {
-    id: "tab-browser",
-    type: "Browser",
-    title: "localhost:8000",
-    url: "http://localhost:8000/",
-    isClosable: true,
-  },
   {
     id: "tab-review",
     type: "Review",
@@ -275,7 +260,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [activeWorkspace, setActiveWorkspace] = useState<string>("const-ai-mobile");
   const [activeConversationId, setActiveConversationId] = useState<string>("");
   const [activeTaskTitle, setActiveTaskTitle] = useState<string>("New Task");
-  const [activeModel, setActiveModel] = useState<string>("Const");
+  const [activeModel, setActiveModel] = useState<string>("");
   const [activeOperatingMode, setActiveOperatingMode] =
     useState<OperatingMode>("ask_before_change");
   const [activeReviewTab, setActiveReviewTab] = useState<ReviewTabType>("Review");
@@ -290,114 +275,178 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [activeTabId, setActiveTabId] = useState<string>("tab-review");
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(INITIAL_WORKSPACES);
 
-  // Live Convex query for the authenticated user
-  const viewer = useQuery(api.users.viewer, isSignedIn ? {} : "skip");
+  // Live Convex query for the authenticated user, config, and conversations
+  const viewer = useQuery(api.users.viewer);
+  const liveUserConfig = useQuery(api.users.getUserConfig, currentUserId ? { userId: currentUserId as any } : {});
+  const allConversations = useQuery(api.conversations.listConversations, currentUserId ? { userId: currentUserId as any } : {});
   const syncClerkUserMutation = useMutation(api.users.syncClerkUser);
   const updateProfileMutation = useMutation(api.users.updateProfile);
   const updateUserConfigMutation = useMutation(api.users.updateUserConfig);
   const createConv = useMutation(api.conversations.createConversation);
 
+  // Real-time reactive synchronization of user config from Convex
+  useEffect(() => {
+    if (liveUserConfig) {
+      const customProvs = liveUserConfig.customProviders || [];
+      const apiKeys = liveUserConfig.customApiKeys || {};
+      const hasAnyProvider =
+        customProvs.some((p: any) => p.isActive !== false && p.models?.length > 0) ||
+        Boolean(apiKeys.gemini || apiKeys.anthropic || apiKeys.openAi || apiKeys.openRouter);
+
+      let resolvedModel = liveUserConfig.activeModel || "";
+      if (!resolvedModel) {
+        const firstProvWithModels = customProvs.find(
+          (p: any) => p.isActive !== false && p.models?.length > 0
+        );
+        if (firstProvWithModels) {
+          resolvedModel = firstProvWithModels.models[0].id;
+        } else if (apiKeys.gemini) {
+          resolvedModel = "gemini-2.0-flash";
+        } else if (apiKeys.anthropic) {
+          resolvedModel = "claude-3-7-sonnet";
+        } else if (apiKeys.openAi) {
+          resolvedModel = "gpt-4o";
+        } else {
+          resolvedModel = "Const";
+        }
+      }
+
+      const configObj: UserConfigData = {
+        _id: liveUserConfig._id,
+        activeModel: resolvedModel,
+        provider: liveUserConfig.provider || "custom_openai",
+        customBaseUrl: liveUserConfig.customBaseUrl || "",
+        customApiKeys: liveUserConfig.customApiKeys || {},
+        customProviders: liveUserConfig.customProviders || [],
+        operatingMode: (liveUserConfig.operatingMode as OperatingMode) || "ask_before_change",
+        systemPersona: liveUserConfig.systemPersona,
+        temperature: liveUserConfig.temperature,
+        voiceSettings: liveUserConfig.voiceSettings as any,
+      };
+      setUserConfig(configObj);
+      setActiveModel(resolvedModel);
+      setActiveOperatingMode(configObj.operatingMode);
+      if (configObj.customBaseUrl) setCustomBaseUrl(configObj.customBaseUrl);
+      if (configObj.customApiKeys?.openAi) setCustomApiKey(configObj.customApiKeys.openAi);
+    }
+  }, [liveUserConfig]);
+
+  // Auto-select latest conversation on initial load if none selected
+  useEffect(() => {
+    if (!activeConversationId && allConversations && allConversations.length > 0) {
+      setActiveConversationId(allConversations[0]._id);
+      setActiveTaskTitle(allConversations[0].title);
+    }
+  }, [allConversations, activeConversationId]);
+
   // Sync Clerk User and Convex Viewer into state
   useEffect(() => {
-    if (!isAuthLoaded) {
-      setIsAuthLoading(true);
-      return;
-    }
-
-    if (isSignedIn && clerkUser) {
+    if (viewer && viewer._id) {
+      const viewerDoc = viewer as any;
       const email =
-        clerkUser.primaryEmailAddress?.emailAddress ||
-        clerkUser.emailAddresses?.[0]?.emailAddress ||
-        "";
+        clerkUser?.primaryEmailAddress?.emailAddress ||
+        viewer.email ||
+        "alif@constai.platform";
       const name =
-        clerkUser.fullName ||
-        [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+        clerkUser?.fullName ||
+        [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") ||
         viewer?.name ||
-        email.split("@")[0] ||
-        "Operator";
+        "Alif Constantine";
       const username =
-        clerkUser.username ||
+        clerkUser?.username ||
         viewer?.username ||
-        (email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") : "operator");
-      const avatarUrl = clerkUser.imageUrl || viewer?.avatarUrl || viewer?.image || "";
+        "alifconstantine";
+      const avatarUrl = clerkUser?.imageUrl || viewer?.avatarUrl || viewer?.image || "";
 
-      // Auto-sync Clerk user with Convex if new or missing ID
-      if ((viewer === null || !viewer?._id) && email) {
+      // Auto-sync Clerk user with Convex if Clerk is signed in
+      if (isSignedIn && clerkUser && email && !viewerDoc.clerkSynced) {
         syncClerkUserMutation({
           email,
           name,
           username,
           avatarUrl,
-        })
-          .then((result) => {
-            if (result?.user?._id) {
-              setCurrentUserId(result.user._id);
-            }
-          })
-          .catch((err) => console.warn("Auto-sync Clerk user to Convex error:", err));
+        }).catch((err) => console.warn("Auto-sync Clerk user to Convex error:", err));
       }
 
-      if (viewer && viewer._id) {
-        const viewerDoc = viewer as any;
-        const userObj: UserProfile = {
-          _id: viewer._id,
-          id: viewer._id,
-          name: viewer.name || name,
-          username: viewer.username || username,
-          email: viewer.email || email,
-          avatarUrl: viewer.avatarUrl || viewer.image || avatarUrl,
-          initials: (viewer.name || name).slice(0, 2).toUpperCase(),
-          subscriptionPlan: viewerDoc.subscriptionPlan || "yearly",
-          subscriptionStatus: viewerDoc.subscriptionStatus || "active",
-          creditsBalanceUsd: viewerDoc.creditsBalanceUsd ?? 100.0,
-        };
+      const userObj: UserProfile = {
+        _id: viewer._id,
+        id: viewer._id,
+        name: viewer.name || name,
+        username: viewer.username || username,
+        email: viewer.email || email,
+        avatarUrl: viewer.avatarUrl || viewer.image || avatarUrl,
+        initials: (viewer.name || name).slice(0, 2).toUpperCase(),
+        subscriptionPlan: viewerDoc.subscriptionPlan || "yearly",
+        subscriptionStatus: viewerDoc.subscriptionStatus || "active",
+        creditsBalanceUsd: viewerDoc.creditsBalanceUsd ?? 100.0,
+      };
 
-        setCurrentUserId(viewer._id);
-        setCurrentUser(userObj);
-        setIsAuthenticated(true);
+      setCurrentUserId(viewer._id);
+      setCurrentUser(userObj);
+      setIsAuthenticated(true);
 
-        if (viewer.config) {
-          const configObj: UserConfigData = {
-            _id: viewer.config._id,
-            activeModel: viewer.config.activeModel || "Const",
-            provider: viewer.config.provider || "custom_openai",
-            customBaseUrl: viewer.config.customBaseUrl || "",
-            customApiKeys: viewer.config.customApiKeys || {},
-            customProviders: viewer.config.customProviders || [],
-            operatingMode: (viewer.config.operatingMode as OperatingMode) || "ask_before_change",
-            systemPersona: viewer.config.systemPersona,
-            temperature: viewer.config.temperature,
-            voiceSettings: viewer.config.voiceSettings as any,
-          };
-          setUserConfig(configObj);
-          setActiveModel(configObj.activeModel);
-          setActiveOperatingMode(configObj.operatingMode);
-          if (configObj.customBaseUrl) setCustomBaseUrl(configObj.customBaseUrl);
-          if (configObj.customApiKeys?.openAi) setCustomApiKey(configObj.customApiKeys.openAi);
+      if (viewer.config) {
+        const customProvs = viewer.config.customProviders || [];
+        const apiKeys = viewer.config.customApiKeys || {};
+        const hasAnyProvider =
+          customProvs.some((p: any) => p.isActive !== false && p.models?.length > 0) ||
+          Boolean(apiKeys.gemini || apiKeys.anthropic || apiKeys.openAi || apiKeys.openRouter);
+
+        let resolvedModel = viewer.config.activeModel || "";
+        if (!hasAnyProvider) {
+          resolvedModel = "";
+        } else if (!resolvedModel) {
+          const firstProvWithModels = customProvs.find((p: any) => p.isActive !== false && p.models?.length > 0);
+          if (firstProvWithModels) {
+            resolvedModel = firstProvWithModels.models[0].id;
+          } else if (apiKeys.gemini) {
+            resolvedModel = "gemini-2.0-flash";
+          } else if (apiKeys.anthropic) {
+            resolvedModel = "claude-3-7-sonnet";
+          } else if (apiKeys.openAi) {
+            resolvedModel = "gpt-4o";
+          }
         }
-      } else {
-        // Temporary preview state while Convex syncs
-        setCurrentUser({
-          id: clerkUser.id,
-          name,
-          username,
-          email,
-          avatarUrl,
-          initials: name.slice(0, 2).toUpperCase(),
-          subscriptionPlan: "yearly",
-          subscriptionStatus: "active",
-          creditsBalanceUsd: 100.0,
-        });
-        setIsAuthenticated(true);
+
+        const configObj: UserConfigData = {
+          _id: viewer.config._id,
+          activeModel: resolvedModel,
+          provider: viewer.config.provider || "custom_openai",
+          customBaseUrl: viewer.config.customBaseUrl || "",
+          customApiKeys: viewer.config.customApiKeys || {},
+          customProviders: viewer.config.customProviders || [],
+          operatingMode: (viewer.config.operatingMode as OperatingMode) || "ask_before_change",
+          systemPersona: viewer.config.systemPersona,
+          temperature: viewer.config.temperature,
+          voiceSettings: viewer.config.voiceSettings as any,
+        };
+        setUserConfig(configObj);
+        setActiveModel(resolvedModel);
+        setActiveOperatingMode(configObj.operatingMode);
+        if (configObj.customBaseUrl) setCustomBaseUrl(configObj.customBaseUrl);
+        if (configObj.customApiKeys?.openAi) setCustomApiKey(configObj.customApiKeys.openAi);
       }
-    } else {
-      // User is signed out
-      setCurrentUserId(null);
-      setCurrentUser(null);
-      setUserConfig(null);
-      setIsAuthenticated(false);
+      setIsAuthLoading(false);
+    } else if (isSignedIn && clerkUser) {
+      // Temporary preview state while Convex syncs
+      const email = clerkUser.primaryEmailAddress?.emailAddress || "";
+      const name = clerkUser.fullName || "Operator";
+      setCurrentUser({
+        id: clerkUser.id,
+        name,
+        username: clerkUser.username || "operator",
+        email,
+        avatarUrl: clerkUser.imageUrl || "",
+        initials: name.slice(0, 2).toUpperCase(),
+        subscriptionPlan: "yearly",
+        subscriptionStatus: "active",
+        creditsBalanceUsd: 100.0,
+      });
+      setIsAuthenticated(true);
+      setIsAuthLoading(false);
+    } else if (isAuthLoaded) {
+      setIsAuthLoading(false);
     }
-    setIsAuthLoading(false);
   }, [isSignedIn, isAuthLoaded, clerkUser, viewer]);
 
   const logout = async () => {

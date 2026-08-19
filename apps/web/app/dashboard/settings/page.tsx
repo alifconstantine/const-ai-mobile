@@ -63,19 +63,7 @@ const DEFAULT_BUILTIN_PROVIDERS = [
   { id: "openai", name: "OpenAI", desc: "GPT-4o & o3-mini" },
 ];
 
-const INITIAL_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
-  {
-    id: "omniroute",
-    name: "OmniRoute",
-    baseUrl: "http://localhost:20128/v1",
-    apiKey: "sk-7852144cf1690e4d-297ffa-3396d47a",
-    apiFormat: "openai_completions",
-    isActive: true,
-    models: [
-      { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
-    ],
-  },
-];
+const INITIAL_CUSTOM_PROVIDERS: CustomProviderConfig[] = [];
 
 export default function SettingsHubPage() {
   const [activeTab, setActiveTab] = useState<
@@ -88,20 +76,19 @@ export default function SettingsHubPage() {
   // Convex Queries & Mutations
   const liveViewer = useQuery(api.users.viewer);
   const updateUserConfigMutation = useMutation(api.users.updateUserConfig);
+  const resetAllProvidersMutation = useMutation(api.users.resetAllProviders);
 
   // Providers & Active State
   const [customProviders, setCustomProviders] = useState<CustomProviderConfig[]>(INITIAL_CUSTOM_PROVIDERS);
-  const [selectedProviderId, setSelectedProviderId] = useState<string>("omniroute");
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("openrouter");
   const [isCreatingNewProvider, setIsCreatingNewProvider] = useState(false);
 
   // Editor Form State for the selected provider
-  const [editName, setEditName] = useState("OmniRoute");
-  const [editBaseUrl, setEditBaseUrl] = useState("http://localhost:20128/v1");
-  const [editApiKey, setEditApiKey] = useState("sk-7852144cf1690e4d-297ffa-3396d47a");
+  const [editName, setEditName] = useState("OpenRouter");
+  const [editBaseUrl, setEditBaseUrl] = useState("https://openrouter.ai/api/v1");
+  const [editApiKey, setEditApiKey] = useState("");
   const [editApiFormat, setEditApiFormat] = useState<CustomProviderConfig["apiFormat"]>("openai_completions");
-  const [editModels, setEditModels] = useState<CustomModelItem[]>([
-    { id: "Const", name: "Const", contextWindow: 200000, supportsTools: true },
-  ]);
+  const [editModels, setEditModels] = useState<CustomModelItem[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState("");
 
@@ -166,12 +153,21 @@ export default function SettingsHubPage() {
       if (cfg.temperature !== undefined) setTemperature([cfg.temperature]);
       if (cfg.systemPersona) setSystemPersona(cfg.systemPersona);
 
+      let gKey = "";
+      let cKey = "";
+      let oKey = "";
+      let rKey = "";
+
       if (cfg.customApiKeys) {
-        if (cfg.customApiKeys.gemini) setGeminiKey(cfg.customApiKeys.gemini);
-        if (cfg.customApiKeys.anthropic) setClaudeKey(cfg.customApiKeys.anthropic);
-        if (cfg.customApiKeys.openAi) setOpenAiKey(cfg.customApiKeys.openAi);
-        if (cfg.customApiKeys.openRouter) setOpenRouterKey(cfg.customApiKeys.openRouter);
+        if (cfg.customApiKeys.gemini) gKey = cfg.customApiKeys.gemini;
+        if (cfg.customApiKeys.anthropic) cKey = cfg.customApiKeys.anthropic;
+        if (cfg.customApiKeys.openAi) oKey = cfg.customApiKeys.openAi;
+        if (cfg.customApiKeys.openRouter) rKey = cfg.customApiKeys.openRouter;
       }
+      setGeminiKey(gKey);
+      setClaudeKey(cKey);
+      setOpenAiKey(oKey);
+      setOpenRouterKey(rKey);
 
       if (cfg.customProviders && cfg.customProviders.length > 0) {
         const filtered = cfg.customProviders.filter((p: any) => p.id !== "zai" && p.name !== "Z.ai");
@@ -187,11 +183,6 @@ export default function SettingsHubPage() {
             setEditModels(activeProv.models || [{ id: "Const", name: "Const", contextWindow: 200000 }]);
           }
         }
-      } else if (cfg.customBaseUrl) {
-        setEditBaseUrl(cfg.customBaseUrl);
-        if (cfg.customApiKeys?.openAi) {
-          setEditApiKey(cfg.customApiKeys.openAi);
-        }
       }
 
       if (cfg.voiceSettings) {
@@ -203,6 +194,24 @@ export default function SettingsHubPage() {
       }
     }
   }, [liveViewer]);
+
+  // Handle Changing the API key for the currently selected provider
+  const handleApiKeyChange = (newKey: string) => {
+    setEditApiKey(newKey);
+    if (selectedProviderId === "gemini") {
+      setGeminiKey(newKey);
+    } else if (selectedProviderId === "anthropic") {
+      setClaudeKey(newKey);
+    } else if (selectedProviderId === "openai") {
+      setOpenAiKey(newKey);
+    } else if (selectedProviderId === "openrouter") {
+      setOpenRouterKey(newKey);
+    } else {
+      setCustomProviders((prev) =>
+        prev.map((p) => (p.id === selectedProviderId ? { ...p, apiKey: newKey } : p))
+      );
+    }
+  };
 
   // Handle Selecting a Provider
   const handleSelectProvider = (provId: string) => {
@@ -233,30 +242,17 @@ export default function SettingsHubPage() {
             ? "https://api.anthropic.com/v1"
             : "https://api.openai.com/v1"
         );
-        setEditApiKey(
+        const currentKey =
           provId === "gemini"
             ? geminiKey
             : provId === "anthropic"
             ? claudeKey
             : provId === "openrouter"
             ? openRouterKey
-            : openAiKey
-        );
-        setEditApiFormat("openai_completions");
-        setEditModels([
-          {
-            id:
-              provId === "gemini"
-                ? "google/gemini-2.0-flash-001"
-                : provId === "anthropic"
-                ? "claude-3-7-sonnet"
-                : provId === "openrouter"
-                ? "anthropic/claude-3.7-sonnet"
-                : "gpt-4o",
-            name: builtin.name,
-            contextWindow: 200000,
-          },
-        ]);
+            : openAiKey;
+        setEditApiKey(currentKey);
+        setEditApiFormat(provId === "anthropic" ? "anthropic_messages" : "openai_completions");
+        setEditModels([]);
       }
     }
   };
@@ -472,29 +468,42 @@ export default function SettingsHubPage() {
 
     setCustomProviders(updatedList);
 
-    if (liveViewer?._id) {
-      setIsSaving(true);
-      try {
-        await updateUserConfigMutation({
-          userId: liveViewer._id,
-          activeModel: editModels[0]?.id || activeModel,
-          customBaseUrl: editBaseUrl,
-          provider: "custom_openai",
-          customProviders: updatedList as any,
-          customApiKeys: {
-            gemini: geminiKey,
-            anthropic: claudeKey,
-            openAi: editApiKey,
-            openRouter: openRouterKey,
-          },
-        });
-        setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3000);
-      } catch (err) {
-        console.error("Failed to save provider:", err);
-      } finally {
-        setIsSaving(false);
-      }
+    setIsSaving(true);
+    try {
+      const currentGemini = selectedProviderId === "gemini" ? editApiKey.trim() : geminiKey.trim();
+      const currentClaude = selectedProviderId === "anthropic" ? editApiKey.trim() : claudeKey.trim();
+      const currentOpenAi = selectedProviderId === "openai" ? editApiKey.trim() : openAiKey.trim();
+      const currentOpenRouter = selectedProviderId === "openrouter" ? editApiKey.trim() : openRouterKey.trim();
+
+      await updateUserConfigMutation({
+        userId: liveViewer?._id,
+        activeModel: editModels[0]?.id || activeModel,
+        customBaseUrl: editBaseUrl,
+        provider: "custom_openai",
+        customProviders: updatedList.map((p) => ({
+          ...p,
+          apiKey: p.apiKey || "",
+          models: p.models.map((m) => ({
+            id: m.id,
+            name: m.name || m.id,
+            contextLength: m.contextWindow || 200000,
+            contextWindow: m.contextWindow || 200000,
+            supportsTools: m.supportsTools ?? true,
+          })),
+        })) as any,
+        customApiKeys: {
+          gemini: currentGemini,
+          anthropic: currentClaude,
+          openAi: currentOpenAi,
+          openRouter: currentOpenRouter,
+        },
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to save provider:", err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -508,33 +517,81 @@ export default function SettingsHubPage() {
       handleSelectProvider("openrouter");
     }
 
-    if (liveViewer?._id) {
+    try {
       await updateUserConfigMutation({
-        userId: liveViewer._id,
+        userId: liveViewer?._id,
         customProviders: updated as any,
       });
+    } catch (err) {
+      console.error("Failed to delete provider:", err);
     }
   };
 
   // Master Save All Settings
   const handleSaveAllSettings = async () => {
-    if (!liveViewer?._id) return;
     setIsSaving(true);
     setSavedSuccess(false);
 
     try {
+      // Merge currently edited provider into list if editing a custom provider
+      let latestProviders = [...customProviders];
+      if (isCreatingNewProvider) {
+        const newId = editName.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now();
+        latestProviders.push({
+          id: newId,
+          name: editName,
+          baseUrl: editBaseUrl,
+          apiKey: editApiKey,
+          apiFormat: editApiFormat,
+          isActive: true,
+          models: editModels.length > 0 ? editModels : [{ id: "Const", name: "Const", contextWindow: 200000 }],
+        });
+        setIsCreatingNewProvider(false);
+      } else if (selectedProviderId !== "gemini" && selectedProviderId !== "anthropic" && selectedProviderId !== "openrouter" && selectedProviderId !== "openai") {
+        latestProviders = latestProviders.map((p) => {
+          if (p.id === selectedProviderId) {
+            return {
+              ...p,
+              name: editName,
+              baseUrl: editBaseUrl,
+              apiKey: editApiKey,
+              apiFormat: editApiFormat,
+              models: editModels,
+            };
+          }
+          return p;
+        });
+      }
+
+      setCustomProviders(latestProviders);
+
+      const currentGemini = selectedProviderId === "gemini" ? editApiKey.trim() : geminiKey.trim();
+      const currentClaude = selectedProviderId === "anthropic" ? editApiKey.trim() : claudeKey.trim();
+      const currentOpenAi = selectedProviderId === "openai" ? editApiKey.trim() : openAiKey.trim();
+      const currentOpenRouter = selectedProviderId === "openrouter" ? editApiKey.trim() : openRouterKey.trim();
+
       await updateUserConfigMutation({
-        userId: liveViewer._id,
+        userId: liveViewer?._id,
         activeModel,
         operatingMode,
         provider: "custom_openai",
         customBaseUrl: editBaseUrl,
-        customProviders: customProviders as any,
+        customProviders: latestProviders.map((p) => ({
+          ...p,
+          apiKey: p.apiKey || "",
+          models: p.models.map((m) => ({
+            id: m.id,
+            name: m.name || m.id,
+            contextLength: m.contextWindow || 200000,
+            contextWindow: m.contextWindow || 200000,
+            supportsTools: m.supportsTools ?? true,
+          })),
+        })) as any,
         customApiKeys: {
-          gemini: geminiKey,
-          anthropic: claudeKey,
-          openAi: editApiKey || openAiKey,
-          openRouter: openRouterKey,
+          gemini: currentGemini,
+          anthropic: currentClaude,
+          openAi: currentOpenAi,
+          openRouter: currentOpenRouter,
         },
       });
 
@@ -542,6 +599,30 @@ export default function SettingsHubPage() {
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
       console.error("Error updating settings in Convex:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Clear / Reset All Providers to factory default clean state
+  const handleClearAllProviders = async () => {
+    setIsSaving(true);
+    try {
+      await resetAllProvidersMutation({ userId: liveViewer?._id });
+      setCustomProviders([]);
+      setGeminiKey("");
+      setClaudeKey("");
+      setOpenAiKey("");
+      setOpenRouterKey("");
+      setEditApiKey("");
+      setEditModels([]);
+      setSelectedProviderId("openrouter");
+      setEditName("OpenRouter");
+      setEditBaseUrl("https://openrouter.ai/api/v1");
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to reset providers:", err);
     } finally {
       setIsSaving(false);
     }
@@ -560,20 +641,32 @@ export default function SettingsHubPage() {
           </p>
         </div>
 
-        <Button
-          onClick={handleSaveAllSettings}
-          disabled={isSaving || !liveViewer?._id}
-          className="bg-white hover:bg-zinc-200 text-black font-semibold rounded-full px-5 text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-lg transition-all"
-        >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : savedSuccess ? (
-            <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          <span>{savedSuccess ? "Saved & Synced!" : "Save & Sync Settings"}</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleClearAllProviders}
+            disabled={isSaving}
+            variant="outline"
+            className="border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 font-medium rounded-full px-4 text-xs cursor-pointer flex items-center gap-1.5 transition-all"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear All</span>
+          </Button>
+
+          <Button
+            onClick={handleSaveAllSettings}
+            disabled={isSaving}
+            className="bg-white hover:bg-zinc-200 text-black font-semibold rounded-full px-5 text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-lg transition-all"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : savedSuccess ? (
+              <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span>{savedSuccess ? "Saved & Synced!" : "Save & Sync Settings"}</span>
+          </Button>
+        </div>
       </div>
 
       {/* Tabs Navigation */}
@@ -613,10 +706,10 @@ export default function SettingsHubPage() {
               {DEFAULT_BUILTIN_PROVIDERS.map((p) => {
                 const isSelected = !isCreatingNewProvider && selectedProviderId === p.id;
                 const isConfigured =
-                  (p.id === "gemini" && Boolean(geminiKey)) ||
-                  (p.id === "anthropic" && Boolean(claudeKey)) ||
-                  (p.id === "openrouter" && Boolean(openRouterKey)) ||
-                  (p.id === "openai" && Boolean(openAiKey));
+                  (p.id === "gemini" && Boolean(geminiKey?.trim())) ||
+                  (p.id === "anthropic" && Boolean(claudeKey?.trim())) ||
+                  (p.id === "openrouter" && Boolean(openRouterKey?.trim())) ||
+                  (p.id === "openai" && Boolean(openAiKey?.trim()));
 
                 return (
                   <button
@@ -739,7 +832,7 @@ export default function SettingsHubPage() {
                     type={showApiKey ? "text" : "password"}
                     placeholder="Enter API key"
                     value={editApiKey}
-                    onChange={(e) => setEditApiKey(e.target.value)}
+                    onChange={(e) => handleApiKeyChange(e.target.value)}
                     className="bg-zinc-900/90 border-zinc-800 text-white placeholder:text-zinc-600 font-mono text-xs pr-10 focus-visible:ring-1 focus-visible:ring-zinc-400"
                   />
                   <button
@@ -884,33 +977,17 @@ export default function SettingsHubPage() {
                     </div>
                   ) : (
                     filteredModels.map((m) => {
-                      const isSystemActive = activeModel === m.id;
                       const testResult = modelTestResults[m.id];
                       const isTesting = testingModelId === m.id;
 
                       return (
                         <div key={m.id} className="space-y-1">
-                          <div
-                            className={`flex items-center justify-between p-2 rounded-lg transition-all border ${
-                              isSystemActive
-                                ? "bg-zinc-900/90 border-emerald-500/30 shadow-xs"
-                                : "bg-zinc-900/50 border-zinc-800/80 hover:border-zinc-700/80"
-                            }`}
-                          >
+                          <div className="flex items-center justify-between p-2 rounded-lg transition-all border bg-zinc-900/50 border-zinc-800/80 hover:border-zinc-700/80">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              {/* Active Selector */}
-                              <button
-                                type="button"
-                                onClick={() => setActiveModel(m.id)}
-                                title="Set as active system model"
-                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 cursor-pointer transition-all ${
-                                  isSystemActive
-                                    ? "border-emerald-400 bg-emerald-400 text-black shadow-[0_0_8px_rgba(52,211,153,0.4)]"
-                                    : "border-zinc-600 hover:border-zinc-400"
-                                }`}
-                              >
-                                {isSystemActive && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                              </button>
+                              {/* Model Icon */}
+                              <div className="w-6 h-6 rounded-md bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center shrink-0">
+                                <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+                              </div>
 
                               {/* Model Info */}
                               <div className="min-w-0 flex-1">
@@ -918,11 +995,6 @@ export default function SettingsHubPage() {
                                   <span className="text-xs font-semibold text-white truncate">
                                     {m.name || m.id}
                                   </span>
-                                  {isSystemActive && (
-                                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/40 px-1.5 py-0.2 rounded-full shrink-0">
-                                      Active
-                                    </span>
-                                  )}
                                 </div>
                                 <p className="text-[10px] text-zinc-500 font-mono truncate">
                                   {m.id} • {m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k ctx` : "200k ctx"}

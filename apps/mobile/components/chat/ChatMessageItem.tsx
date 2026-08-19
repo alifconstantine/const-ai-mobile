@@ -7,12 +7,9 @@ import {
   ChevronRight,
   Sparkles,
   Terminal,
-  FileCode,
-  Globe,
   ThumbsUp,
   ThumbsDown,
   Volume2,
-  Undo2,
 } from "lucide-react-native";
 import { useNavigation } from "../../context/NavigationContext";
 
@@ -83,16 +80,6 @@ export function ChatMessageItem({ message, onCopyPrompt }: Props) {
 
   // 2. Render Assistant Response
   const hasToolCalls = Boolean(message.toolCalls && message.toolCalls.length > 0);
-  const isWebRelated =
-    message.content.includes("localhost:8000") ||
-    message.content.includes("website preview") ||
-    message.content.includes("server.js");
-
-  const isFileRelated =
-    message.content.includes("server.js") ||
-    message.content.includes("diff") ||
-    message.content.includes(".ts") ||
-    message.content.includes(".json");
 
   return (
     <View style={styles.aiContainer}>
@@ -105,7 +92,7 @@ export function ChatMessageItem({ message, onCopyPrompt }: Props) {
             activeOpacity={0.8}
           >
             <View style={styles.activityHeaderLeft}>
-              <Sparkles size={13} color="#a1a1aa" />
+              <Sparkles size={13} color="#38bdf8" />
               <Text style={styles.activityTitle}>
                 Executed {message.toolCalls?.length} tools & actions
               </Text>
@@ -143,75 +130,6 @@ export function ChatMessageItem({ message, onCopyPrompt }: Props) {
           );
         })}
       </View>
-
-      {/* Dynamic Action Card: Web Server Preview */}
-      {isWebRelated && (
-        <View style={styles.actionCard}>
-          <View style={styles.actionCardLeft}>
-            <View style={styles.actionIconContainer}>
-              <Globe size={16} color="#38bdf8" />
-            </View>
-            <View>
-              <Text style={styles.actionCardTitle}>localhost:8000</Text>
-              <Text style={styles.actionCardSubtitle}>Website preview running</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.btnActionOpen}
-            onPress={() => {
-              openSideTab({
-                id: "tab-browser",
-                type: "Browser",
-                title: "localhost:8000",
-                url: "http://localhost:8000/",
-                isClosable: true,
-              });
-            }}
-          >
-            <Text style={styles.btnActionOpenText}>Open</Text>
-            <ChevronRight size={12} color="#d4d4d8" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Dynamic Action Card: File Changes Diff */}
-      {isFileRelated && (
-        <View style={styles.actionCard}>
-          <View style={styles.actionCardLeft}>
-            <View style={styles.actionIconContainer}>
-              <FileCode size={16} color="#eab308" />
-            </View>
-            <View>
-              <View style={styles.fileCardHeader}>
-                <Text style={styles.actionCardTitle}>server.js</Text>
-                <Text style={styles.diffPill}>+42 -0</Text>
-              </View>
-              <Text style={styles.actionCardSubtitle}>1 file modified</Text>
-            </View>
-          </View>
-
-          <View style={styles.fileCardButtons}>
-            <TouchableOpacity
-              style={styles.btnReviewCode}
-              onPress={() => {
-                openSideTab({
-                  id: "tab-file-server",
-                  type: "File",
-                  title: "server.js",
-                  filename: "server.js",
-                  isClosable: true,
-                });
-              }}
-            >
-              <Text style={styles.btnReviewCodeText}>Review</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.btnUndoMini}>
-              <Undo2 size={12} color="#a1a1aa" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       {/* Assistant Message Footer */}
       <View style={styles.aiFooter}>

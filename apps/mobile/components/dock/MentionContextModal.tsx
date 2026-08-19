@@ -17,6 +17,10 @@ import {
   FileCode,
   Info,
   Layers,
+  Smartphone,
+  Terminal,
+  Shield,
+  Volume2,
 } from "lucide-react-native";
 import { useNavigation } from "../../context/NavigationContext";
 
@@ -37,53 +41,66 @@ interface FileItem {
 
 const PLUGINS: PluginItem[] = [
   {
-    id: "browser-use",
-    name: "browser-use",
-    badge: "zcode-plugins-official • 2 skills • 0 MCP",
-    iconBg: "#3f3f46",
-    icon: Globe,
+    id: "device-operator",
+    name: "device_operator",
+    badge: "Contacts, Storage, Apps, Hardware",
+    iconBg: "#38bdf8",
+    icon: Smartphone,
   },
   {
-    id: "document-skills",
-    name: "document-skills",
-    badge: "zcode-plugins-official • 3 skills • 0 MCP",
-    iconBg: "#eab308",
-    icon: FileText,
+    id: "accessibility-spatial",
+    name: "accessibility_spatial",
+    badge: "Visual Perception, Tap, Gesture",
+    iconBg: "#a855f7",
+    icon: Layers,
   },
   {
-    id: "skill-creator",
-    name: "skill-creator",
-    badge: "zcode-plugins-official • 1 skills • 0 MCP",
+    id: "termux-cli",
+    name: "termux_cli",
+    badge: "Linux Terminal, Bash, Python, Git",
+    iconBg: "#22c55e",
+    icon: Terminal,
+  },
+  {
+    id: "shizuku-bridge",
+    name: "shizuku_bridge",
+    badge: "Privileged ADB, Silent PM, Storage",
     iconBg: "#f97316",
-    icon: PenTool,
+    icon: Shield,
   },
   {
-    id: "zcode-guide",
-    name: "zcode-guide",
-    badge: "zcode-plugins-official • 6 skills • 0 MCP",
-    iconBg: "#27272a",
-    icon: BookOpen,
+    id: "supertonic-voice",
+    name: "supertonic_voice",
+    badge: "Supertonic-3 TTS Neural Audio",
+    iconBg: "#ec4899",
+    icon: Volume2,
   },
 ];
 
 const FILES: FileItem[] = [
   {
-    id: "jurnal-pdf",
-    name: "Jurnal_Umum_Bengkel_Maju_Jaya_Januari_2024.pdf",
-    iconBg: "#ef4444",
+    id: "architecture-md",
+    name: "ARCHITECTURE.md",
+    iconBg: "#3f3f46",
     icon: FileText,
   },
   {
-    id: "server-js",
-    name: "server.js",
+    id: "agent-ts",
+    name: "packages/backend/convex/agent.ts",
+    iconBg: "#3b82f6",
+    icon: FileCode,
+  },
+  {
+    id: "types-ts",
+    name: "packages/types/src/index.ts",
     iconBg: "#eab308",
     icon: FileCode,
   },
   {
-    id: "index-html",
-    name: "index.html",
-    iconBg: "#38bdf8",
-    icon: Globe,
+    id: "index-tsx",
+    name: "apps/mobile/app/index.tsx",
+    iconBg: "#06b6d4",
+    icon: FileCode,
   },
 ];
 

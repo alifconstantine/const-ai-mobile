@@ -70,6 +70,7 @@ export default defineSchema({
               id: v.string(),
               name: v.string(),
               contextLength: v.optional(v.number()),
+              contextWindow: v.optional(v.number()),
               supportsTools: v.optional(v.boolean()),
             })
           ),
@@ -249,7 +250,9 @@ export default defineSchema({
     stdout: v.optional(v.string()),
     stderr: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_target_device_status", ["targetDeviceId", "status"]),
+  })
+    .index("by_target_device_status", ["targetDeviceId", "status"])
+    .index("by_conversation", ["conversationId"]),
 
   // 10. Scheduled Tasks
   scheduledTasks: defineTable({

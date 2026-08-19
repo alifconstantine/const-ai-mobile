@@ -162,14 +162,31 @@ export async function executeLLMCompletion(
     bodyPayload["tool_choice"] = "auto";
   }
 
-  // 3. Make HTTP request
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(bodyPayload),
-  });
+  // 3. Make HTTP request with 15s timeout
+  let response: Response;
+  let rawText = "";
 
-  const rawText = await response.text();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    rawText = await response.text();
+  } catch (fetchErr: any) {
+    if (fetchErr.name === "AbortError" || fetchErr.message?.includes("aborted")) {
+      throw new Error(`Timeout (15s): Tidak mendapat respon dari endpoint "${endpoint}". Pastikan server lokal Anda aktif atau gunakan provider cloud di Web Settings.`);
+    }
+    if (fetchErr.message?.includes("ECONNREFUSED") || fetchErr.message?.includes("fetch failed")) {
+      throw new Error(`Koneksi gagal ke "${endpoint}". Pastikan server lokal (OmniRoute/Ollama) berjalan, atau atur API Key (Gemini/OpenRouter/OpenAI) di Web Settings.`);
+    }
+    throw fetchErr;
+  }
 
   if (!response.ok) {
     let errorMessage = `Provider error (${response.status}): ${response.statusText}`;

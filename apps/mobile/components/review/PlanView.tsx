@@ -12,43 +12,25 @@ import {
   Clock,
   FileCheck,
   ShieldAlert,
+  ClipboardList,
 } from "lucide-react-native";
-
-interface PlanTask {
-  id: string;
-  title: string;
-  desc: string;
-  status: "completed" | "in_progress" | "pending";
-}
-
-const PLAN_STEPS: PlanTask[] = [
-  {
-    id: "step-1",
-    title: "1. Prompt Dock Action Menu (+)",
-    desc: "Attachment picker, @ context mentions, and / slash commands",
-    status: "completed",
-  },
-  {
-    id: "step-2",
-    title: "2. Auto-Recommender Popovers",
-    desc: "Real-time suggestion card for Plugins, Files, and Commands",
-    status: "completed",
-  },
-  {
-    id: "step-3",
-    title: "3. Multi-Tab Right Sidebar",
-    desc: "Tabs for Files, Browser, Explore, Plan, and Review",
-    status: "in_progress",
-  },
-  {
-    id: "step-4",
-    title: "4. User Approval & Verification",
-    desc: "Verify interactive flows and monorepo TypeScript build",
-    status: "pending",
-  },
-];
+import { useQuery } from "convex/react";
+import { api } from "@const-ai/backend";
+import { useNavigation } from "../../context/NavigationContext";
 
 export const PlanView: React.FC = () => {
+  const { activeConversationId, activeTaskTitle } = useNavigation();
+
+  const plan = useQuery(
+    (api as any).implementationPlans?.getPlanByConversation,
+    activeConversationId ? { conversationId: activeConversationId as any } : "skip"
+  );
+
+  const goal = plan?.goal || `Active Task: ${activeTaskTitle || "General Assistant Session"}`;
+  const status = plan?.status || "in_progress";
+  const changes = plan?.proposedChanges || [];
+  const verifications = plan?.verificationSteps || [];
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -57,47 +39,61 @@ export const PlanView: React.FC = () => {
           <Text style={styles.headerTitle}>Implementation Plan</Text>
         </View>
         <View style={styles.statusBadge}>
-          <Text style={styles.statusBadgeText}>In Progress</Text>
+          <Text style={styles.statusBadgeText}>
+            {status === "completed" ? "Completed" : status === "approved" ? "Approved" : "In Progress"}
+          </Text>
         </View>
       </View>
 
       <ScrollView style={styles.scrollArea} bounces={false}>
-        <Text style={styles.sectionTitle}>CURRENT OBJECTIVE</Text>
-        <Text style={styles.objectiveText}>
-          Implement interactive prompt dock menus and multi-tab sidebar navigation for mobile and desktop preview.
-        </Text>
+        <Text style={styles.sectionTitle}>CURRENT GOAL</Text>
+        <Text style={styles.objectiveText}>{goal}</Text>
 
-        <Text style={[styles.sectionTitle, { marginTop: 14 }]}>EXECUTION CHECKLIST</Text>
-        <View style={styles.checklist}>
-          {PLAN_STEPS.map((step) => {
-            const isCompleted = step.status === "completed";
-            const isInProgress = step.status === "in_progress";
-
-            return (
-              <View key={step.id} style={styles.stepCard}>
-                <View style={styles.stepHeader}>
-                  {isCompleted ? (
-                    <CheckCircle2 size={16} color="#22c55e" />
-                  ) : isInProgress ? (
-                    <Clock size={16} color="#38bdf8" />
-                  ) : (
-                    <Circle size={16} color="#52525b" />
-                  )}
-                  <Text
-                    style={[
-                      styles.stepTitle,
-                      isCompleted && styles.stepTitleCompleted,
-                      isInProgress && styles.stepTitleInProgress,
-                    ]}
-                  >
-                    {step.title}
-                  </Text>
+        {changes.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>PROPOSED CHANGES</Text>
+            <View style={styles.checklist}>
+              {changes.map((item: any, idx: number) => (
+                <View key={idx} style={styles.stepCard}>
+                  <View style={styles.stepHeader}>
+                    <FileCheck size={14} color="#38bdf8" />
+                    <Text style={styles.stepTitle}>{item.filePath}</Text>
+                    <View style={[styles.actionTag, item.action === "create" ? styles.tagCreate : styles.tagModify]}>
+                      <Text style={styles.actionTagText}>{item.action.toUpperCase()}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.stepDesc}>{item.explanation}</Text>
                 </View>
-                <Text style={styles.stepDesc}>{step.desc}</Text>
-              </View>
-            );
-          })}
-        </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {verifications.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>VERIFICATION STEPS</Text>
+            <View style={styles.checklist}>
+              {verifications.map((step: string, idx: number) => (
+                <View key={idx} style={styles.stepCard}>
+                  <View style={styles.stepHeader}>
+                    <CheckCircle2 size={14} color="#22c55e" />
+                    <Text style={styles.stepTitle}>{step}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {changes.length === 0 && verifications.length === 0 && (
+          <View style={styles.emptyCard}>
+            <ClipboardList size={28} color="#52525b" />
+            <Text style={styles.emptyTitle}>No Plan Active</Text>
+            <Text style={styles.emptySubtitle}>
+              When working in Plan Mode or asking for complex refactors, the agent will draft structured steps here.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -190,6 +186,42 @@ const styles = StyleSheet.create({
     color: "#71717a",
     fontSize: 11.5,
     paddingLeft: 24,
+    lineHeight: 16,
+  },
+  actionTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: "auto",
+  },
+  tagCreate: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+  },
+  tagModify: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+  },
+  actionTagText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "#fafafa",
+  },
+  emptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: "#fafafa",
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    color: "#71717a",
+    fontSize: 11.5,
+    textAlign: "center",
     lineHeight: 16,
   },
 });
