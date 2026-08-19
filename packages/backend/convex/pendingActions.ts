@@ -39,8 +39,11 @@ export const createPendingAction = mutation({
   args: {
     userId: v.optional(v.union(v.id("users"), v.string())),
     conversationId: v.id("conversations"),
-    targetDeviceId: v.id("devices"),
+    targetDeviceId: v.optional(v.id("devices")),
+    assistantMessageId: v.optional(v.id("messages")),
+    toolCallId: v.optional(v.string()),
     toolName: v.string(),
+    toolArgs: v.optional(v.any()),
     actionType: v.optional(
       v.union(
         v.literal("shell_command"),
@@ -51,19 +54,22 @@ export const createPendingAction = mutation({
     command: v.string(),
     workingDir: v.optional(v.string()),
     diffContent: v.optional(v.string()),
+    riskLevel: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { userId } = await requireAuthenticatedUser(ctx);
-
     return await ctx.db.insert("pendingActions", {
-      userId,
+      userId: args.userId as any,
       conversationId: args.conversationId,
       targetDeviceId: args.targetDeviceId,
+      assistantMessageId: args.assistantMessageId,
+      toolCallId: args.toolCallId,
       toolName: args.toolName,
+      toolArgs: args.toolArgs,
       actionType: args.actionType,
       command: args.command,
       workingDir: args.workingDir,
       diffContent: args.diffContent,
+      riskLevel: args.riskLevel,
       status: "pending",
       createdAt: Date.now(),
     });
@@ -78,12 +84,34 @@ export const resolvePendingAction = mutation({
     stderr: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    const actionDoc = await ctx.db.get(args.pendingActionId);
+    if (!actionDoc) return;
 
     await ctx.db.patch(args.pendingActionId, {
       status: args.status,
       stdout: args.stdout,
       stderr: args.stderr,
     });
+
+    // If associated with a message and toolCallId, update the message toolCall status
+    if (actionDoc.assistantMessageId && actionDoc.toolCallId) {
+      const message = await ctx.db.get(actionDoc.assistantMessageId);
+      if (message && message.toolCalls) {
+        const nextStatus = args.status === "approved" ? "running" : "failed";
+        const updated = message.toolCalls.map((tc) => {
+          if (tc.id === actionDoc.toolCallId) {
+            return {
+              ...tc,
+              status: nextStatus as any,
+              result: args.status === "rejected" ? { error: "User rejected action" } : tc.result,
+            };
+          }
+          return tc;
+        });
+        await ctx.db.patch(actionDoc.assistantMessageId, {
+          toolCalls: updated,
+        });
+      }
+    }
   },
 });

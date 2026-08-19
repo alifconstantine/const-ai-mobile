@@ -109,35 +109,37 @@ graph LR
 
 ---
 
-## 📱 TAHAP 3: Mobile Data Sync & Live Chat Stream (`apps/mobile`)
+## 📱 TAHAP 3: Mobile Data Sync & Live Chat Stream (`apps/mobile`) (Status: SELESAI ✅)
 
 ### 3.2. Main Chat Stream & Interaksi Komponen (`app/index.tsx`)
-- [ ] Sinkronisasi realtime keys dan config dari Convex ke Mobile.
-- [ ] **Context Compaction & Token Budgeting (Diadopsi dari const-harness)**:
-  - Auto-summarize turn percakapan lama saat context window > 80% untuk menghemat memori & token HP.
-- [ ] **User Message Card**: Teks prompt gelap modern + footer tombol **`[📋 Copy]`** dan **`[✏️ Edit]`** (dengan aksi rewind & shadow git rollback).
-- [ ] **AI Response & Execution Activity**:
-  - **Accordion *"Worked for 44s v"***: Rincian sub-langkah eksekusi tools (`Ran $ curl ...`, `Wrote 📄 server.js +42`, dll.).
-  - **Main Markdown Output**: Render Markdown, sintaks kode, dan tabel.
-  - **Action Cards**: Web Preview Card (`localhost:8000`), File Changes Diff Card (`> 1 file changed +42`), Device Storage/Contact Card.
+- [x] Sinkronisasi realtime keys dan config dari Convex ke Mobile.
+- [x] **Autonomous On-Device Tool Runner (`useDeviceAgentRunner.ts`)**:
+  - Listener reaktif pesan `running` untuk menjalankan skrip Termux, perintah Shizuku, kontak, storage cleaner, kontrol hardware, dan spatial accessibility, lalu otomatis mengirimkan hasilnya via `api.agent.submitToolResult`.
+- [x] **Context Compaction & Token Budgeting**:
+  - Truncation otomatis pesan output tool (>4000 karakter) dan penataan history percakapan agar hemat token dan sesuai spesifikasi OpenAI/Claude/OpenRouter tool calling specs.
+- [x] **User Message Card**: Teks prompt gelap modern + footer tombol **`[📋 Copy]`** dan optimistic send rendering.
+- [x] **AI Response & Execution Activity**:
+  - **Accordion *"Executed X tools & actions"***: Rincian sub-langkah eksekusi tools dengan indikator status (*Running*, *Awaiting approval*, *Success*, *Failed*).
+  - **Main Markdown Output**: Render Markdown kaya, header `#`, `##`, `###`, bullet list, dan blockquote.
+  - **Code Blocks & Syntax Copy**: Wadah kode gelap dengan badge bahasa pemrograman (`bash`, `javascript`, `python`, `json`) dan tombol copy instan.
   - **AI Message Footer**: `[Copy]`, `[👍 Good response]`, `[👎 Bad response]`, `[🔊 Play Neural Voice]`.
 
 ### 3.3. Komponen Persetujuan Izin & Keamanan HITL (`components/hitl/`)
-- [ ] **Permission Required Card (`PermissionRequiredCard.tsx`)**:
-  - Header badge `Permission required` & `Awaiting approval` berkedip.
-  - Code Block command yang diminta.
+- [x] **Permission Required Card (`PermissionRequiredCard.tsx`)**:
+  - Header badge `Permission required` & level risiko (`🟡 Medium Risk` / `🔴 Critical Risk`).
+  - Code Block command yang diminta beserta target path / working directory.
   - 3 Radio Options: `1. Allow (1x)`, `2. Always allow in this project`, `3. Deny`.
-  - Tombol **`[Confirm]`**.
+  - Tombol **`[Confirm & Execute]`** / **`[Confirm Deny]`** terhubung ke mutasi `resolvePendingAction`.
 
-### 3.4. AI Multiline Input Dock (`components/chat/ChatInputDock.tsx`)
-- [ ] **Floating HITL Notification Bar** di atas input box saat ada aksi tertunda.
-- [ ] **Multiline Input Box** dengan placeholder informatif.
-- [ ] **Bottom Action Bar**:
-  - Tombol **`[+]`** (Attachment, @ mention, / skill commands).
-  - **Context Window Meter Pill** (e.g. `218.6K/1M (21.9%)` & cache hit `91.3%`).
-  - **Operating Mode Selector Pill** (Dropdown 4 mode).
-  - **Model Selector Pill** (Dropdown model).
-  - **Voice Hands-Free Button `[🎙️]`** & Tombol Kirim **`[⬆️]`**.
+### 3.4. AI Multiline Input Dock & Floating HITL Bar (`app/index.tsx`)
+- [x] **Floating HITL Notification Bar (`FloatingHitlBar.tsx`)** di atas input box saat ada aksi tertunda dengan tombol review instan.
+- [x] **Multiline Input Box** dengan auto-growing height dan tombol kirim responsif.
+- [x] **Bottom Action Bar**:
+  - Tombol **`[+]`** (Attachment, @ mention, / slash commands modal).
+  - **Context Window Meter Pill** (e.g. `218.6K/1M (21.9%)`).
+  - **Operating Mode Selector Pill** (Dropdown 4 mode: *Ask before change*, *Agent*, *Code review*, *Read-only*).
+  - **Model Selector Pill** (Two-tier popover model selection & *"Manage models"* saat belum terkonfigurasi).
+  - Tombol Kirim **`[⬆️]`**.
 
 ---
 

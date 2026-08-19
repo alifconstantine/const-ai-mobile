@@ -217,6 +217,14 @@ export const sendMessage = action({
 
     // Process each Tool Call through Policy Engine (HITL Safety Evaluation)
     const evaluatedToolCalls: EvaluatedToolCall[] = [];
+    const pendingInterceptions: Array<{
+      tcId: string;
+      toolName: ConstToolName;
+      toolArgs: Record<string, unknown>;
+      suggestedActionType?: "shell_command" | "device_control" | "file_delete";
+      userFacingSummary: string;
+      riskLevel: string;
+    }> = [];
 
     for (const tc of llmResponse.toolCalls) {
       const toolName = tc.name as ConstToolName;
@@ -226,17 +234,14 @@ export const sendMessage = action({
       const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
 
       if (policy.decision === "ask") {
-        // Intercept action into pendingActions table
-        if (args.targetDeviceId) {
-          await ctx.runMutation(api.pendingActions.createPendingAction, {
-            userId: args.userId,
-            conversationId: args.conversationId,
-            targetDeviceId: args.targetDeviceId,
-            toolName: toolName,
-            actionType: policy.suggestedActionType,
-            command: policy.userFacingSummary,
-          });
-        }
+        pendingInterceptions.push({
+          tcId: tc.id,
+          toolName,
+          toolArgs,
+          suggestedActionType: policy.suggestedActionType,
+          userFacingSummary: policy.userFacingSummary,
+          riskLevel: policy.riskLevel,
+        });
 
         evaluatedToolCalls.push({
           id: tc.id,
@@ -272,6 +277,22 @@ export const sendMessage = action({
       }
     );
 
+    // Create pending actions linked to this assistant message
+    for (const pi of pendingInterceptions) {
+      await ctx.runMutation(api.pendingActions.createPendingAction, {
+        userId: args.userId,
+        conversationId: args.conversationId,
+        targetDeviceId: args.targetDeviceId,
+        assistantMessageId: assistantMessageId as any,
+        toolCallId: pi.tcId,
+        toolName: pi.toolName,
+        toolArgs: pi.toolArgs,
+        actionType: pi.suggestedActionType,
+        command: pi.userFacingSummary,
+        riskLevel: pi.riskLevel,
+      });
+    }
+
     return {
       success: true,
       messageId: assistantMessageId,
@@ -302,11 +323,20 @@ export const submitToolResult = action({
       status: args.status,
     });
 
-    // 2. Insert tool result as a role: "tool" message in conversation history
+    // 2. Insert tool result as a role: "tool" message in conversation history (with context compaction)
+    const rawResultStr =
+      typeof args.result === "string"
+        ? args.result
+        : JSON.stringify(args.result, null, 2);
+    const compactedResult =
+      rawResultStr.length > 4000
+        ? rawResultStr.slice(0, 4000) + "\n...[Output truncated to 4000 chars]"
+        : rawResultStr;
+
     await ctx.runMutation(api.messages.insertMessage, {
       conversationId: args.conversationId,
       role: "tool",
-      content: JSON.stringify(args.result),
+      content: compactedResult,
     });
 
     // 3. Re-fetch message history to resume reasoning loop
@@ -395,11 +425,26 @@ export const submitToolResult = action({
 
     const messages: LLMMessage[] = [
       { role: "system", content: systemPrompt },
-      ...history.slice(-15).map((m: { role: string; content: string; toolCalls?: any }) => ({
-        role: m.role as "system" | "user" | "assistant" | "tool",
-        content: m.content,
-        tool_call_id: m.role === "tool" ? args.toolCallId : undefined,
-      })),
+      ...history.slice(-15).map((m: { role: string; content: string; toolCalls?: any[] }) => {
+        const msg: LLMMessage = {
+          role: m.role as "system" | "user" | "assistant" | "tool",
+          content: m.content,
+        };
+        if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+          msg.tool_calls = m.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: {
+              name: tc.toolName,
+              arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args),
+            },
+          }));
+        }
+        if (m.role === "tool") {
+          msg.tool_call_id = args.toolCallId;
+        }
+        return msg;
+      }),
     ];
 
     // 4. Continue generation to summarize tool result for user
@@ -410,6 +455,85 @@ export const submitToolResult = action({
       apiKey,
       tools: CONST_DEVICE_TOOLS,
     });
+
+    // If continuation requested further tool calls, evaluate and save
+    if (continuation.toolCalls && continuation.toolCalls.length > 0) {
+      const evaluatedToolCalls: EvaluatedToolCall[] = [];
+      const pendingInterceptions: Array<{
+        tcId: string;
+        toolName: ConstToolName;
+        toolArgs: Record<string, unknown>;
+        suggestedActionType?: "shell_command" | "device_control" | "file_delete";
+        userFacingSummary: string;
+        riskLevel: string;
+      }> = [];
+
+      for (const tc of continuation.toolCalls) {
+        const toolName = tc.name as ConstToolName;
+        const toolArgs = tc.arguments;
+        const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
+
+        if (policy.decision === "ask") {
+          pendingInterceptions.push({
+            tcId: tc.id,
+            toolName,
+            toolArgs,
+            suggestedActionType: policy.suggestedActionType,
+            userFacingSummary: policy.userFacingSummary,
+            riskLevel: policy.riskLevel,
+          });
+          evaluatedToolCalls.push({
+            id: tc.id,
+            toolName,
+            args: toolArgs,
+            policyDecision: "ask" as const,
+            status: "waiting_hitl" as const,
+          });
+        } else {
+          evaluatedToolCalls.push({
+            id: tc.id,
+            toolName,
+            args: toolArgs,
+            policyDecision: "allow" as const,
+            status: "running" as const,
+          });
+        }
+      }
+
+      const nextMessageId: string = await ctx.runMutation(
+        api.messages.insertMessage,
+        {
+          conversationId: args.conversationId,
+          role: "assistant",
+          content:
+            continuation.content || "Menjalankan instruksi lanjutan perangkat...",
+          toolCalls: evaluatedToolCalls,
+          modelUsed: continuation.modelUsed,
+          promptTokens: continuation.usage?.promptTokens,
+          completionTokens: continuation.usage?.completionTokens,
+        }
+      );
+
+      for (const pi of pendingInterceptions) {
+        await ctx.runMutation(api.pendingActions.createPendingAction, {
+          userId: args.userId,
+          conversationId: args.conversationId,
+          assistantMessageId: nextMessageId as any,
+          toolCallId: pi.tcId,
+          toolName: pi.toolName,
+          toolArgs: pi.toolArgs,
+          actionType: pi.suggestedActionType,
+          command: pi.userFacingSummary,
+          riskLevel: pi.riskLevel,
+        });
+      }
+
+      return {
+        success: true,
+        messageId: nextMessageId,
+        content: continuation.content,
+      };
+    }
 
     // 5. Save the final assistant follow-up response
     const nextMessageId: string = await ctx.runMutation(

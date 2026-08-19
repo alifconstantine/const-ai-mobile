@@ -234,14 +234,18 @@ export default defineSchema({
 
   // 9. Human-in-the-Loop (HITL) Action Queue
   pendingActions: defineTable({
-    userId: v.id("users"),
+    userId: v.optional(v.union(v.id("users"), v.string())),
     conversationId: v.id("conversations"),
-    targetDeviceId: v.id("devices"),
+    targetDeviceId: v.optional(v.id("devices")),
+    assistantMessageId: v.optional(v.id("messages")),
+    toolCallId: v.optional(v.string()),
     toolName: v.string(),
+    toolArgs: v.optional(v.any()),
     actionType: v.optional(v.union(v.literal("shell_command"), v.literal("device_control"), v.literal("file_delete"))),
     command: v.string(),
     workingDir: v.optional(v.string()),
     diffContent: v.optional(v.string()),
+    riskLevel: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),

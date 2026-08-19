@@ -41,6 +41,8 @@ import { useRouter } from "expo-router";
 import { SlashCommandModal } from "../components/dock/SlashCommandModal";
 import { ChatMessageItem } from "../components/chat/ChatMessageItem";
 import { ThinkingIndicator } from "../components/chat/ThinkingIndicator";
+import { FloatingHitlBar } from "../components/hitl/FloatingHitlBar";
+import { useDeviceAgentRunner } from "../hooks/useDeviceAgentRunner";
 import { useNavigation } from "../context/NavigationContext";
 
 export default function HomeScreen() {
@@ -91,6 +93,38 @@ export default function HomeScreen() {
       ? { conversationId: activeConversationId as any }
       : "skip"
   );
+
+  // Query pending HITL actions for the active conversation
+  const pendingActions = useQuery(
+    api.pendingActions.listPendingByConversation,
+    activeConversationId && !activeConversationId.startsWith("local_")
+      ? { conversationId: activeConversationId as any }
+      : "skip"
+  );
+
+  // Map pending actions by toolCallId for fast lookup
+  const pendingActionMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    if (pendingActions) {
+      for (const pa of pendingActions) {
+        if (pa.toolCallId) {
+          map[pa.toolCallId] = pa;
+        }
+      }
+    }
+    return map;
+  }, [pendingActions]);
+
+  const activePendingCount = useMemo(() => {
+    return pendingActions?.filter((pa: any) => pa.status === "pending").length || 0;
+  }, [pendingActions]);
+
+  // Autonomous On-Device Tool Runner (executes running tool calls via native bridges)
+  useDeviceAgentRunner({
+    conversationId: activeConversationId,
+    userId: currentUserId,
+    messages: messages as any,
+  });
 
   // Send action dispatcher & update title mutation
   const sendMessageAction = useAction(api.agent.sendMessage);
@@ -319,6 +353,7 @@ export default function HomeScreen() {
           <ChatMessageItem
             key={msg._id}
             message={msg}
+            pendingActionMap={pendingActionMap}
             onCopyPrompt={(txt) => setPromptInput(txt)}
           />
         ))}
@@ -352,6 +387,12 @@ export default function HomeScreen() {
           { paddingBottom: Math.max(insets.bottom, 10) },
         ]}
       >
+        {/* Floating HITL Banner if actions await approval */}
+        <FloatingHitlBar
+          pendingCount={activePendingCount}
+          onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        />
+
         <View style={styles.inputBoxContainer}>
           <TextInput
             style={styles.inputTextInput}
