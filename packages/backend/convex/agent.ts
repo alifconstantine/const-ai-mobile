@@ -74,20 +74,45 @@ export const sendMessage = action({
       userConfig?.operatingMode ||
       "ask_before_change";
 
-    const activeModel =
-      args.modelOverride || userConfig?.activeModel || "Const";
+    // Clean active model string (strip UI prefixes/suffixes if present)
+    const rawModel = args.modelOverride || userConfig?.activeModel || "Const";
+    const activeModel = rawModel.split(" (")[0].trim();
 
-    const provider: LLMProviderType =
-      (userConfig?.provider as LLMProviderType) ||
-      (activeModel === "Const" ? "custom_openai" : "openrouter");
+    // Check if the requested model belongs to any custom provider in userConfig
+    const customProvidersList = userConfig?.customProviders || [];
+    const matchedCustomProvider = customProvidersList.find((p: any) =>
+      p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
+    ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
+
+    // Determine LLM provider type
+    let provider: LLMProviderType = "custom_openai";
+    let matchedBaseUrl = "";
+    let matchedApiKey = "";
+
+    if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
+      provider = "custom_openai";
+      matchedBaseUrl = matchedCustomProvider.baseUrl || "";
+      matchedApiKey = matchedCustomProvider.apiKey || "";
+    } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
+      provider = "gemini";
+    } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
+      provider = "anthropic";
+    } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
+      provider = "openai";
+    } else if (userConfig?.provider) {
+      provider = userConfig.provider as LLMProviderType;
+    } else {
+      provider = "custom_openai";
+    }
 
     const customBaseUrl =
       args.customBaseUrlOverride ||
+      matchedBaseUrl ||
       userConfig?.customBaseUrl ||
       (typeof process !== "undefined" && process.env.CUSTOM_LLM_BASE_URL) ||
-      "";
+      "http://localhost:20128/v1";
 
-    // Resolve API key by provider preference & environment variables
+    // Resolve API key by provider preference, custom provider config & environment variables
     const envKey =
       (typeof process !== "undefined" &&
         (provider === "openrouter"
@@ -103,6 +128,7 @@ export const sendMessage = action({
 
     const apiKey =
       args.customApiKeyOverride ||
+      matchedApiKey ||
       (provider === "gemini"
         ? userConfig?.customApiKeys?.gemini
         : provider === "anthropic"
@@ -111,7 +137,7 @@ export const sendMessage = action({
         ? userConfig?.customApiKeys?.openRouter
         : userConfig?.customApiKeys?.openAi || userConfig?.customApiKeys?.openRouter) ||
       envKey ||
-      "";
+      "sk-7852144cf1690e4d-297ffa-3396d47a";
 
     // 3. Build System Prompt & Canonical Messages Array
     const systemPrompt = buildSystemPrompt({

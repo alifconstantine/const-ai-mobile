@@ -523,27 +523,23 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const createNewConversation = async (
     title: string = "New Task"
   ): Promise<string | null> => {
-    if (!currentUserId) {
-      const fallbackId = `local_conv_${Date.now()}`;
-      setActiveConversationId(fallbackId);
-      setActiveTaskTitle(title);
-      return fallbackId;
-    }
     try {
       const convId = await createConv({
-        userId: currentUserId as any,
+        userId: currentUserId ? (currentUserId as any) : undefined,
         title,
       });
-      setActiveConversationId(convId);
-      setActiveTaskTitle(title);
-      return convId;
+      if (convId) {
+        setActiveConversationId(convId);
+        setActiveTaskTitle(title);
+        return convId;
+      }
     } catch (err) {
       console.warn("Failed to create conversation in DB:", err);
-      const fallbackId = `local_conv_${Date.now()}`;
-      setActiveConversationId(fallbackId);
-      setActiveTaskTitle(title);
-      return fallbackId;
     }
+    const fallbackId = `local_conv_${Date.now()}`;
+    setActiveConversationId(fallbackId);
+    setActiveTaskTitle(title);
+    return fallbackId;
   };
 
   const handleSetWorkspace = (workspaceName: string) => {

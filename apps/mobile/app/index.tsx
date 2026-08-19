@@ -123,19 +123,20 @@ export default function HomeScreen() {
         }
       }
 
-      if (!currentUserId || !convId) {
+      if (!convId || convId.startsWith("local_")) {
+        console.warn("No active conversation ID available for chat.");
         setIsSending(false);
         return;
       }
 
       await sendMessageAction({
-        userId: currentUserId as any,
+        userId: currentUserId ? (currentUserId as any) : undefined,
         conversationId: convId as any,
         userMessage: text,
         modelOverride: activeModel,
         operatingModeOverride: activeOperatingMode,
-        customApiKeyOverride: customApiKey,
-        customBaseUrlOverride: customBaseUrl,
+        customApiKeyOverride: customApiKey || undefined,
+        customBaseUrlOverride: customBaseUrl || undefined,
       });
     } catch (err) {
       console.error("Error sending message:", err);

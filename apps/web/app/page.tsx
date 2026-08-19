@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { ConstLogoIcon } from "@/components/ConstLogo";
 
 interface StatItem {
@@ -121,8 +123,17 @@ function StatCounter({ stat, index }: { stat: StatItem; index: number }) {
 }
 
 export default function Home() {
+  const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"home" | "product" | "features" | "mobile">("home");
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   // Close mobile menu on Escape key
   useEffect(() => {

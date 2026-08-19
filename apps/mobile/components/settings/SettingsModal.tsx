@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -30,25 +31,10 @@ import {
   EyeOff,
   CreditCard,
   Layers,
+  ExternalLink,
 } from "lucide-react-native";
 import { OperatingMode } from "@const-ai/types";
 import { useNavigation } from "../../context/NavigationContext";
-
-const PROVIDERS = [
-  { id: "custom_openai", name: "OmniRoute / Custom", badge: "Local/Proxy" },
-  { id: "gemini", name: "Google Gemini", badge: "Multimodal" },
-  { id: "anthropic", name: "Anthropic Claude", badge: "Reasoning" },
-  { id: "openrouter", name: "OpenRouter", badge: "200+ Models" },
-  { id: "openai", name: "OpenAI", badge: "GPT-4o" },
-];
-
-const MODELS = [
-  { id: "Const", name: "Const (OmniRoute)", badge: "Fast" },
-  { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", badge: "Fast" },
-  { id: "claude-3.7-sonnet", name: "Claude 3.7 Sonnet", badge: "Thinking" },
-  { id: "deepseek-r1", name: "DeepSeek R1", badge: "Reasoning" },
-  { id: "gpt-4o", name: "GPT-4o", badge: "Omni" },
-];
 
 const OPERATING_MODES: {
   id: OperatingMode;
@@ -169,6 +155,73 @@ export const SettingsModal: React.FC = () => {
       console.error("Save settings error:", err);
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  // Dynamic custom providers & models from userConfig
+  const configuredProviders = useMemo(() => {
+    if (userConfig?.customProviders && userConfig.customProviders.length > 0) {
+      return userConfig.customProviders.map((p) => ({
+        id: p.id,
+        name: p.name,
+        badge: p.apiFormat || "Custom",
+        baseUrl: p.baseUrl,
+      }));
+    }
+    return [
+      { id: "custom_openai", name: "OmniRoute / Custom", badge: "Local/Proxy", baseUrl: "http://localhost:20128/v1" },
+      { id: "gemini", name: "Google Gemini", badge: "Multimodal", baseUrl: "" },
+      { id: "anthropic", name: "Anthropic Claude", badge: "Reasoning", baseUrl: "" },
+      { id: "openrouter", name: "OpenRouter", badge: "200+ Models", baseUrl: "" },
+      { id: "openai", name: "OpenAI", badge: "GPT-4o", baseUrl: "" },
+    ];
+  }, [userConfig]);
+
+  const configuredModels = useMemo(() => {
+    const list: Array<{ id: string; name: string; badge: string }> = [];
+    const seen = new Set<string>();
+
+    if (userConfig?.customProviders) {
+      for (const prov of userConfig.customProviders) {
+        if (prov.models) {
+          for (const m of prov.models) {
+            if (m.id && !seen.has(m.id)) {
+              seen.add(m.id);
+              list.push({
+                id: m.id,
+                name: m.name || m.id,
+                badge: prov.name,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (activeModel && !seen.has(activeModel)) {
+      list.unshift({
+        id: activeModel,
+        name: activeModel,
+        badge: "Active",
+      });
+      seen.add(activeModel);
+    }
+
+    if (list.length === 0) {
+      list.push({ id: "Const", name: "Const", badge: "Fast" });
+    }
+
+    return list;
+  }, [userConfig, activeModel]);
+
+  const handleOpenWebSettings = async () => {
+    setSettingsModalOpen(false);
+    const webUrl =
+      process.env.EXPO_PUBLIC_WEB_URL || "http://localhost:3000/dashboard/settings";
+    try {
+      await Linking.openURL(webUrl);
+    } catch (err) {
+      console.warn("Failed to open web URL:", err);
     }
   };
 
@@ -361,15 +414,27 @@ export const SettingsModal: React.FC = () => {
                   <View style={styles.tabContent}>
                     {/* Active Provider Selector */}
                     <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>AI Engine Provider</Text>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <Text style={styles.sectionTitle}>AI Engine Providers</Text>
+                        <TouchableOpacity
+                          onPress={handleOpenWebSettings}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                        >
+                          <Text style={{ color: "#38bdf8", fontSize: 11, fontWeight: "500" }}>Manage on Web</Text>
+                          <ExternalLink size={12} color="#38bdf8" />
+                        </TouchableOpacity>
+                      </View>
                       <View style={styles.optionsList}>
-                        {PROVIDERS.map((prov) => {
+                        {configuredProviders.map((prov) => {
                           const isSelected = selectedProvider === prov.id;
                           return (
                             <TouchableOpacity
                               key={prov.id}
                               style={[styles.optionCard, isSelected && styles.optionCardActive]}
-                              onPress={() => setSelectedProvider(prov.id)}
+                              onPress={() => {
+                                setSelectedProvider(prov.id);
+                                if (prov.baseUrl) setBaseUrlInput(prov.baseUrl);
+                              }}
                             >
                               <View style={styles.optionInfo}>
                                 <Text style={[styles.optionName, isSelected && styles.optionNameActive]}>
@@ -431,9 +496,9 @@ export const SettingsModal: React.FC = () => {
 
                     {/* Active Model Picker */}
                     <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>Active Model</Text>
+                      <Text style={styles.sectionTitle}>Active Model ({configuredModels.length} synced from Web)</Text>
                       <View style={styles.optionsList}>
-                        {MODELS.map((model) => {
+                        {configuredModels.map((model) => {
                           const isSelected = activeModel === model.id;
                           return (
                             <TouchableOpacity
