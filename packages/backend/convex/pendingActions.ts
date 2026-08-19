@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 export const listPendingByDevice = query({
   args: {
@@ -33,10 +34,10 @@ export const createPendingAction = mutation({
     diffContent: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    let targetUserId = null;
+    let targetUserId: Id<"users"> | null = null;
     if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
       try {
-        const user = await ctx.db.get(args.userId as any);
+        const user = await ctx.db.get(args.userId as Id<"users">);
         if (user) targetUserId = user._id;
       } catch {
         // ignore
@@ -54,7 +55,9 @@ export const createPendingAction = mutation({
     }
     if (!targetUserId) {
       const defaultUser = await ctx.db.query("users").first();
-      targetUserId = defaultUser?._id;
+      if (defaultUser) {
+        targetUserId = defaultUser._id;
+      }
     }
     if (!targetUserId) {
       targetUserId = await ctx.db.insert("users", {

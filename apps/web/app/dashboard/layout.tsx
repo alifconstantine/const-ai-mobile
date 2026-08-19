@@ -164,7 +164,6 @@ export default function DashboardLayout({
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {clerkIsSignedIn ? (
               <UserButton
-                afterSignOutUrl="/sign-in"
                 appearance={{
                   elements: {
                     avatarBox: "w-8 h-8 rounded-full border border-zinc-700",
