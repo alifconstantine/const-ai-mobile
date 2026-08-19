@@ -1,81 +1,42 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { auth } from "./auth";
+import {
+  getAuthenticatedUser,
+  requireAuthenticatedUser,
+  resolveTargetUserId,
+} from "./authUtils";
 
 /**
  * Returns the currently authenticated user based on Clerk JWT identity or Convex Auth session.
+ * Safely returns null if unauthenticated without leaking any other user's data.
  */
 export const viewer = query({
   args: {},
   handler: async (ctx) => {
-    // 1. Check Clerk JWT Identity
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity) {
-      const email = identity.email || "";
-      const user = email
-        ? await ctx.db
-            .query("users")
-            .withIndex("email", (q) => q.eq("email", email))
-            .first()
-        : null;
+    const authResult = await getAuthenticatedUser(ctx);
 
-      if (user) {
-        const config = await ctx.db
-          .query("userConfigs")
-          .withIndex("by_user", (q) => q.eq("userId", user._id))
-          .first();
-
-        return {
-          ...user,
-          config: sanitizeUserConfig(config),
-        };
-      }
-
-      // Return virtual identity preview before initial sync
-      return {
-        _id: undefined,
-        name: identity.name || (email ? email.split("@")[0] : "Operator"),
-        email: email || undefined,
-        username: (identity.nickname as string) || (email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") : "operator"),
-        avatarUrl: identity.pictureUrl,
-        image: identity.pictureUrl,
-        config: null,
-      };
-    }
-
-    // 2. Check Convex Auth Session
-    try {
-      const userId = await auth.getUserId(ctx);
-      if (userId) {
-        const user = await ctx.db.get(userId);
-        if (user) {
-          const config = await ctx.db
-            .query("userConfigs")
-            .withIndex("by_user", (q) => q.eq("userId", userId))
-            .first();
-
-          return {
-            ...user,
-            config: sanitizeUserConfig(config),
-          };
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    // 3. Fallback to default user & config for local / single-tenant workspace
-    const defaultUser = await ctx.db.query("users").first();
-    if (defaultUser) {
+    if (authResult.user) {
       const config = await ctx.db
         .query("userConfigs")
-        .withIndex("by_user", (q) => q.eq("userId", defaultUser._id))
+        .withIndex("by_user", (q: any) => q.eq("userId", authResult.user!._id))
         .first();
 
       return {
-        ...defaultUser,
+        ...authResult.user,
         config: sanitizeUserConfig(config),
+      };
+    }
+
+    if (authResult.isVirtualClerkPreview && authResult.virtualProfile) {
+      return {
+        _id: undefined,
+        name: authResult.virtualProfile.name,
+        email: authResult.virtualProfile.email,
+        username: authResult.virtualProfile.username,
+        avatarUrl: authResult.virtualProfile.avatarUrl,
+        image: authResult.virtualProfile.avatarUrl,
+        config: null,
       };
     }
 
@@ -95,30 +56,7 @@ export const updateProfile = mutation({
     onboardingCompleted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    let targetUserId = null;
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity && identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email))
-        .first();
-      if (user) {
-        targetUserId = user._id;
-      }
-    }
-
-    if (!targetUserId) {
-      try {
-        targetUserId = await auth.getUserId(ctx);
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!targetUserId) {
-      throw new Error("Unauthorized: Please sign in to update your profile");
-    }
+    const { userId } = await requireAuthenticatedUser(ctx);
 
     const patchPayload: Record<string, unknown> = {};
     if (args.name !== undefined) patchPayload.name = args.name;
@@ -128,8 +66,8 @@ export const updateProfile = mutation({
     if (args.onboardingCompleted !== undefined)
       patchPayload.onboardingCompleted = args.onboardingCompleted;
 
-    await ctx.db.patch(targetUserId, patchPayload);
-    return await ctx.db.get(targetUserId);
+    await ctx.db.patch(userId, patchPayload);
+    return await ctx.db.get(userId);
   },
 });
 
@@ -173,17 +111,23 @@ export const getOrCreateDefaultUser = mutation({
     name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const email = args.email || "alif@constai.platform";
-    const name = args.name || "Alif Constantine";
+    // Check if caller is authenticated first
+    const authResult = await getAuthenticatedUser(ctx);
+    let targetUser = authResult.user;
 
-    let user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", email))
-      .first();
+    const email = args.email || authResult.virtualProfile?.email || targetUser?.email || "alif@constai.platform";
+    const name = args.name || authResult.virtualProfile?.name || targetUser?.name || "Alif Constantine";
 
     const now = Date.now();
 
-    if (!user) {
+    if (!targetUser) {
+      targetUser = await ctx.db
+        .query("users")
+        .withIndex("email", (q: any) => q.eq("email", email))
+        .first();
+    }
+
+    if (!targetUser) {
       const userId = await ctx.db.insert("users", {
         email,
         name,
@@ -193,21 +137,21 @@ export const getOrCreateDefaultUser = mutation({
         creditsBalanceUsd: 100.0,
         createdAt: now,
       });
-      user = await ctx.db.get(userId);
+      targetUser = await ctx.db.get(userId);
     }
 
-    if (!user) {
-      throw new Error("Failed to initialize default user");
+    if (!targetUser) {
+      throw new Error("Failed to initialize user session");
     }
 
     let config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q: any) => q.eq("userId", targetUser._id))
       .first();
 
     if (!config) {
       const configId = await ctx.db.insert("userConfigs", {
-        userId: user._id,
+        userId: targetUser._id,
         inferenceMode: "byok",
         activeModel: "Const",
         operatingMode: "ask_before_change",
@@ -241,7 +185,7 @@ export const getOrCreateDefaultUser = mutation({
     }
 
     return {
-      user,
+      user: targetUser,
       config: sanitizeUserConfig(config),
     };
   },
@@ -250,35 +194,13 @@ export const getOrCreateDefaultUser = mutation({
 export const getUserConfig = query({
   args: { userId: v.optional(v.union(v.id("users"), v.string())) },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string") {
-      try {
-        const userDoc = await ctx.db.get(args.userId as Id<"users">);
-        if (userDoc) targetUserId = userDoc._id;
-      } catch {
-        // ignore
-      }
-    }
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) targetUserId = defaultUser._id;
-    }
+    const targetUserId = await resolveTargetUserId(ctx, args.userId);
     if (!targetUserId) {
       return null;
     }
     const config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user", (q: any) => q.eq("userId", targetUserId))
       .first();
     return sanitizeUserConfig(config);
   },
@@ -342,41 +264,11 @@ export const updateUserConfig = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string") {
-      try {
-        const userDoc = await ctx.db.get(args.userId as Id<"users">);
-        if (userDoc) targetUserId = userDoc._id;
-      } catch {
-        // ignore
-      }
-    }
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) targetUserId = defaultUser._id;
-    }
-    if (!targetUserId) {
-      targetUserId = await ctx.db.insert("users", {
-        email: "operator@constai.platform",
-        name: "Operator",
-        subscriptionStatus: "active",
-        createdAt: Date.now(),
-      });
-    }
+    const { userId } = await requireAuthenticatedUser(ctx);
 
     const config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .first();
 
     const patchPayload: Record<string, unknown> = {};
@@ -402,7 +294,7 @@ export const updateUserConfig = mutation({
 
     if (!config) {
       const configId = await ctx.db.insert("userConfigs", {
-        userId: targetUserId,
+        userId,
         inferenceMode: "byok",
         activeModel: (args.activeModel as string) || "Const",
         operatingMode: (args.operatingMode as any) || "ask_before_change",
@@ -451,7 +343,7 @@ export const syncClerkUser = mutation({
 
     let user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", email))
+      .withIndex("email", (q: any) => q.eq("email", email))
       .first();
 
     const name = args.name || identity?.name || email.split("@")[0];
@@ -489,7 +381,7 @@ export const syncClerkUser = mutation({
 
     let config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
       .first();
 
     if (!config) {
@@ -534,34 +426,11 @@ export const resetAllProviders = mutation({
     userId: v.optional(v.union(v.id("users"), v.string())),
   },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string") {
-      try {
-        const userDoc = await ctx.db.get(args.userId as Id<"users">);
-        if (userDoc) targetUserId = userDoc._id;
-      } catch {
-        // ignore
-      }
-    }
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) targetUserId = defaultUser._id;
-    }
-    if (!targetUserId) return null;
+    const { userId } = await requireAuthenticatedUser(ctx);
 
     const config = await ctx.db
       .query("userConfigs")
-      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .first();
 
     if (config) {
@@ -583,28 +452,13 @@ export const resetAllProviders = mutation({
 
 /**
  * Returns comprehensive live dashboard summary metrics for the active authenticated user.
- * If there is no activity yet, returns actual zeroed metrics.
+ * If unauthenticated or no activity yet, safely returns zeroed default metrics.
  */
 export const getDashboardSummary = query({
   args: {},
   handler: async (ctx) => {
-    let targetUserId = null;
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity && identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email))
-        .first();
-      if (user) targetUserId = user._id;
-    }
-
-    if (!targetUserId) {
-      try {
-        targetUserId = await auth.getUserId(ctx);
-      } catch {
-        // ignore
-      }
-    }
+    const authResult = await getAuthenticatedUser(ctx);
+    const targetUserId = authResult.userId;
 
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
@@ -657,7 +511,7 @@ export const getDashboardSummary = query({
 
     const conversations = await ctx.db
       .query("conversations")
-      .withIndex("by_user_updated", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user_updated", (q: any) => q.eq("userId", targetUserId))
       .collect();
 
     const totalSessions = conversations.length;
@@ -683,7 +537,7 @@ export const getDashboardSummary = query({
     for (const conv of conversations) {
       const messages = await ctx.db
         .query("messages")
-        .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+        .withIndex("by_conversation", (q: any) => q.eq("conversationId", conv._id))
         .collect();
 
       totalMessages += messages.length;
@@ -820,29 +674,14 @@ export const listRecentLogs = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const maxItems = args.limit || 50;
-    let targetUserId = null;
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity && identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email))
-        .first();
-      if (user) targetUserId = user._id;
-    }
-
-    if (!targetUserId) {
-      try {
-        targetUserId = await auth.getUserId(ctx);
-      } catch {
-        // ignore
-      }
-    }
+    const authResult = await getAuthenticatedUser(ctx);
+    const targetUserId = authResult.userId;
 
     if (!targetUserId) return [];
 
     const conversations = await ctx.db
       .query("conversations")
-      .withIndex("by_user_updated", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user_updated", (q: any) => q.eq("userId", targetUserId))
       .collect();
 
     if (conversations.length === 0) return [];
@@ -852,7 +691,7 @@ export const listRecentLogs = query({
     for (const conv of conversations) {
       const messages = await ctx.db
         .query("messages")
-        .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+        .withIndex("by_conversation", (q: any) => q.eq("conversationId", conv._id))
         .order("desc")
         .take(maxItems);
 
@@ -877,7 +716,7 @@ export const listRecentLogs = query({
           logs.push({
             id: msg._id,
             timestamp: msg.createdAt,
-            status: (msg.toolCalls?.some((t) => t.status === "failed") ? 500 : 200) as 200 | 400 | 429 | 500,
+            status: (msg.toolCalls?.some((t: any) => t.status === "failed") ? 500 : 200) as 200 | 400 | 429 | 500,
             model,
             provider,
             tokensIn: msg.promptTokens || 0,
@@ -885,7 +724,7 @@ export const listRecentLogs = query({
             durationMs: 0,
             promptSnippet: `Conversation: ${conv.title}`,
             responseSnippet: msg.content || "Tool calling execution turn",
-            toolsCalled: msg.toolCalls?.map((t) => t.toolName) || [],
+            toolsCalled: msg.toolCalls?.map((t: any) => t.toolName) || [],
           });
         }
       }
@@ -901,31 +740,14 @@ export const listRecentLogs = query({
 export const listDevices = query({
   args: {},
   handler: async (ctx) => {
-    let targetUserId = null;
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity && identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email))
-        .first();
-      if (user) targetUserId = user._id;
-    }
-
-    if (!targetUserId) {
-      try {
-        targetUserId = await auth.getUserId(ctx);
-      } catch {
-        // ignore
-      }
-    }
+    const authResult = await getAuthenticatedUser(ctx);
+    const targetUserId = authResult.userId;
 
     if (!targetUserId) return [];
 
     return await ctx.db
       .query("devices")
-      .withIndex("by_user", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user", (q: any) => q.eq("userId", targetUserId))
       .collect();
   },
 });
-
-

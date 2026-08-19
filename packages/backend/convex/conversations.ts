@@ -1,38 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import {
+  requireAuthenticatedUser,
+  resolveTargetUserId,
+} from "./authUtils";
 
 export const listConversations = query({
   args: { userId: v.optional(v.union(v.id("users"), v.string())) },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-
-    if (args.userId && typeof args.userId === "string") {
-      try {
-        const userDoc = await ctx.db.get(args.userId as Id<"users">);
-        if (userDoc) targetUserId = userDoc._id;
-      } catch {
-        // not a direct Convex ID
-      }
-    }
-
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) {
-        targetUserId = defaultUser._id;
-      }
-    }
+    const targetUserId = await resolveTargetUserId(ctx, args.userId);
 
     if (!targetUserId) {
       return [];
@@ -40,7 +16,7 @@ export const listConversations = query({
 
     return await ctx.db
       .query("conversations")
-      .withIndex("by_user_updated", (q) => q.eq("userId", targetUserId))
+      .withIndex("by_user_updated", (q: any) => q.eq("userId", targetUserId))
       .order("desc")
       .collect();
   },
@@ -67,48 +43,11 @@ export const createConversation = mutation({
     targetRunnerDeviceId: v.optional(v.id("devices")),
   },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-
-    if (args.userId && typeof args.userId === "string") {
-      try {
-        const userDoc = await ctx.db.get(args.userId as Id<"users">);
-        if (userDoc) targetUserId = userDoc._id;
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) {
-        targetUserId = defaultUser._id;
-      } else {
-        targetUserId = await ctx.db.insert("users", {
-          email: "operator@constai.platform",
-          name: "Operator",
-          subscriptionStatus: "active",
-          subscriptionPlan: "yearly",
-          subscriptionExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-          creditsBalanceUsd: 50.0,
-          createdAt: Date.now(),
-        });
-      }
-    }
+    const { userId } = await requireAuthenticatedUser(ctx);
 
     const now = Date.now();
     return await ctx.db.insert("conversations", {
-      userId: targetUserId,
+      userId,
       title: args.title,
       isPinned: false,
       targetRunnerDeviceId: args.targetRunnerDeviceId,
@@ -124,6 +63,8 @@ export const updateConversationTitle = mutation({
     title: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+
     await ctx.db.patch(args.conversationId, {
       title: args.title,
       updatedAt: Date.now(),
@@ -137,6 +78,8 @@ export const togglePinConversation = mutation({
     isPinned: v.boolean(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+
     await ctx.db.patch(args.conversationId, {
       isPinned: args.isPinned,
       updatedAt: Date.now(),

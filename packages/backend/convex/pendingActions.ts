@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import {
+  requireAuthenticatedUser,
+} from "./authUtils";
 
 export const listPendingByDevice = query({
   args: {
@@ -9,7 +11,7 @@ export const listPendingByDevice = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("pendingActions")
-      .withIndex("by_target_device_status", (q) =>
+      .withIndex("by_target_device_status", (q: any) =>
         q.eq("targetDeviceId", args.targetDeviceId).eq("status", "pending")
       )
       .collect();
@@ -25,7 +27,7 @@ export const listPendingByConversation = query({
     try {
       return await ctx.db
         .query("pendingActions")
-        .filter((q) => q.eq(q.field("conversationId"), args.conversationId as any))
+        .filter((q: any) => q.eq(q.field("conversationId"), args.conversationId as any))
         .collect();
     } catch {
       return [];
@@ -51,42 +53,10 @@ export const createPendingAction = mutation({
     diffContent: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    let targetUserId: Id<"users"> | null = null;
-    if (args.userId && typeof args.userId === "string" && !args.userId.startsWith("user_")) {
-      try {
-        const user = await ctx.db.get(args.userId as Id<"users">);
-        if (user) targetUserId = user._id;
-      } catch {
-        // ignore
-      }
-    }
-    if (!targetUserId) {
-      const identity = await ctx.auth.getUserIdentity();
-      if (identity?.email) {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("email", (q) => q.eq("email", identity.email))
-          .first();
-        if (user) targetUserId = user._id;
-      }
-    }
-    if (!targetUserId) {
-      const defaultUser = await ctx.db.query("users").first();
-      if (defaultUser) {
-        targetUserId = defaultUser._id;
-      }
-    }
-    if (!targetUserId) {
-      targetUserId = await ctx.db.insert("users", {
-        email: "operator@constai.platform",
-        name: "Operator",
-        subscriptionStatus: "active",
-        createdAt: Date.now(),
-      });
-    }
+    const { userId } = await requireAuthenticatedUser(ctx);
 
     return await ctx.db.insert("pendingActions", {
-      userId: targetUserId,
+      userId,
       conversationId: args.conversationId,
       targetDeviceId: args.targetDeviceId,
       toolName: args.toolName,
@@ -108,6 +78,8 @@ export const resolvePendingAction = mutation({
     stderr: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+
     await ctx.db.patch(args.pendingActionId, {
       status: args.status,
       stdout: args.stdout,

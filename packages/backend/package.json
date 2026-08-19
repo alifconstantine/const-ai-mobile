@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx convex/policyEngine.test.ts"
   },
   "main": "./convex/_generated/api.js",
   "types": "./convex/_generated/api.d.ts",

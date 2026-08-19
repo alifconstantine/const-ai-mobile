@@ -10,6 +10,7 @@
 
 import type * as agent from "../agent.js";
 import type * as auth from "../auth.js";
+import type * as authUtils from "../authUtils.js";
 import type * as conversations from "../conversations.js";
 import type * as http from "../http.js";
 import type * as implementationPlans from "../implementationPlans.js";
@@ -29,6 +30,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   auth: typeof auth;
+  authUtils: typeof authUtils;
   conversations: typeof conversations;
   http: typeof http;
   implementationPlans: typeof implementationPlans;
