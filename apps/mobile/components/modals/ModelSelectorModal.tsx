@@ -35,6 +35,7 @@ export const ModelSelectorModal: React.FC = () => {
   const {
     isModelSelectorModalOpen,
     setModelSelectorModalOpen,
+    openSettingsTab,
     activeModel,
     setActiveModel,
     updateUserSettings,
@@ -147,21 +148,9 @@ export const ModelSelectorModal: React.FC = () => {
     setModelSelectorModalOpen(false);
   };
 
-  const handleOpenManageModels = async () => {
+  const handleOpenManageModels = () => {
     setModelSelectorModalOpen(false);
-    const webUrl =
-      process.env.EXPO_PUBLIC_WEB_URL ||
-      "http://localhost:3000/dashboard/settings";
-    try {
-      const canOpen = await Linking.canOpenURL(webUrl);
-      if (canOpen) {
-        await Linking.openURL(webUrl);
-      } else {
-        await Linking.openURL("http://localhost:3000/dashboard/settings");
-      }
-    } catch (err) {
-      console.warn("Failed to open web URL:", err);
-    }
+    openSettingsTab("models");
   };
 
   return (
@@ -183,7 +172,7 @@ export const ModelSelectorModal: React.FC = () => {
                   </View>
                   <Text style={styles.emptyTitle}>No Models Configured</Text>
                   <Text style={styles.emptySubtitle}>
-                    Configure your providers and API keys in Web Settings to enable models.
+                    Configure your AI providers and API keys in Settings to enable models.
                   </Text>
                   <TouchableOpacity
                     style={styles.manageButton}
@@ -191,13 +180,13 @@ export const ModelSelectorModal: React.FC = () => {
                     activeOpacity={0.8}
                   >
                     <Settings size={13} color="#38bdf8" />
-                    <Text style={styles.manageButtonText}>Manage models</Text>
-                    <ExternalLink size={11} color="#38bdf8" />
+                    <Text style={styles.manageButtonText}>Configure API Keys</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 /* Two-Tier Hierarchical Popover Matching Image 2 */
                 <View style={styles.twoTierContainer}>
+
                   {/* Left Flyout: Models Submenu */}
                   {activeProvider && activeProvider.models.length > 0 && (
                     <View style={styles.modelsFlyoutCard}>

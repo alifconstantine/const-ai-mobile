@@ -3,8 +3,13 @@ import { View, ActivityIndicator, Text, StyleSheet, Platform } from "react-nativ
 import { useRouter } from "expo-router";
 import { useAuth } from "@clerk/expo";
 import { AuthenticateWithRedirectCallback } from "@clerk/react";
+import * as WebBrowser from "expo-web-browser";
+
+// Complete auth session on redirect callback
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SSOCallbackScreen() {
+
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
 

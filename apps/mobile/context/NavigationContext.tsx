@@ -172,9 +172,13 @@ interface NavigationContextType {
   setWorkspaceModalOpen: (open: boolean) => void;
   setOverflowMenuOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
+  settingsInitialTab: "profile" | "models" | "mode" | "system";
+  setSettingsInitialTab: (tab: "profile" | "models" | "mode" | "system") => void;
+  openSettingsTab: (tab: "profile" | "models" | "mode" | "system") => void;
   setOperatingModeModalOpen: (open: boolean) => void;
   setModelSelectorModalOpen: (open: boolean) => void;
   setContextMeterOpen: (open: boolean) => void;
+
 
   setPlusMenuOpen: (open: boolean) => void;
   setMentionOpen: (open: boolean) => void;
@@ -248,7 +252,9 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"profile" | "models" | "mode" | "system">("profile");
   const [isOperatingModeModalOpen, setIsOperatingModeModalOpen] = useState(false);
+
   const [isModelSelectorModalOpen, setIsModelSelectorModalOpen] = useState(false);
   const [isContextMeterOpen, setIsContextMeterOpen] = useState(false);
 
@@ -699,9 +705,16 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         setWorkspaceModalOpen: setIsWorkspaceModalOpen,
         setOverflowMenuOpen: setIsOverflowMenuOpen,
         setSettingsModalOpen: setIsSettingsModalOpen,
+        settingsInitialTab,
+        setSettingsInitialTab,
+        openSettingsTab: (tab: "profile" | "models" | "mode" | "system") => {
+          setSettingsInitialTab(tab);
+          setIsSettingsModalOpen(true);
+        },
         setOperatingModeModalOpen: setIsOperatingModeModalOpen,
         setModelSelectorModalOpen: setIsModelSelectorModalOpen,
         setContextMeterOpen: setIsContextMeterOpen,
+
 
         setPlusMenuOpen: setIsPlusMenuOpen,
         setMentionOpen: setIsMentionOpen,

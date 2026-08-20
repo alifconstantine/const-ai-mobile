@@ -6,9 +6,12 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
 import { NavigationProvider } from "../context/NavigationContext";
 import { tokenCache } from "../services/auth/tokenCache";
+
+// Handle any pending auth sessions on web/native redirects
+WebBrowser.maybeCompleteAuthSession();
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
 
@@ -17,23 +20,10 @@ function resolveConvexUrl(): string {
   if (envUrl && !envUrl.includes("127.0.0.1") && !envUrl.includes("localhost")) {
     return envUrl;
   }
-
-  // On physical native devices, localhost/127.0.0.1 fails; fallback to Cloud development instance
-  if (Platform.OS !== "web") {
-    return "https://polished-parrot-102.convex.cloud";
-  }
-
-  // Auto-resolve laptop/host IP when running on physical device via Expo Go (if in local mode)
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri) {
-    const hostIp = hostUri.split(":")[0];
-    if (hostIp && hostIp !== "localhost" && hostIp !== "127.0.0.1") {
-      return `http://${hostIp}:3210`;
-    }
-  }
-
-  return envUrl || "https://polished-parrot-102.convex.cloud";
+  // Full production & mobile cloud instance
+  return "https://polished-parrot-102.convex.cloud";
 }
+
 
 export default function RootLayout() {
   const convex = useMemo(() => new ConvexReactClient(resolveConvexUrl()), []);

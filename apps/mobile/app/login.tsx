@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import {
   Bot,
   Zap,
@@ -25,9 +26,25 @@ import {
 } from "lucide-react-native";
 import { useSSO, useAuth } from "@clerk/expo";
 
+// Handle completed authentication sessions immediately
+WebBrowser.maybeCompleteAuthSession();
+
+// Warm up the browser on Android to reduce authentication load times
+export const useWarmUpBrowser = () => {
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+};
+
 export default function LoginScreen() {
+  useWarmUpBrowser();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
   const { startSSOFlow } = useSSO();
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
 

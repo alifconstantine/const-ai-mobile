@@ -68,6 +68,7 @@ export const SettingsModal: React.FC = () => {
   const {
     isSettingsModalOpen,
     setSettingsModalOpen,
+    settingsInitialTab,
     currentUser,
     userConfig,
     activeModel,
@@ -84,7 +85,16 @@ export const SettingsModal: React.FC = () => {
   } = useNavigation();
 
   // Active Tab: profile | models | mode | system
-  const [activeTab, setActiveTab] = useState<"profile" | "models" | "mode" | "system">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "models" | "mode" | "system">(
+    settingsInitialTab || "profile"
+  );
+
+  useEffect(() => {
+    if (isSettingsModalOpen && settingsInitialTab) {
+      setActiveTab(settingsInitialTab);
+    }
+  }, [isSettingsModalOpen, settingsInitialTab]);
+
 
   // Edit Profile States
   const [editName, setEditName] = useState(currentUser?.name || "Alif Constantine");
