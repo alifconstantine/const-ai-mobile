@@ -1044,10 +1044,97 @@ export const SettingsModal: React.FC = () => {
                       </View>
                     </View>
 
-                    {/* SECTION 2: System Services Status */}
+                    {/* SECTION 2: Shizuku Privileged ADB Setup */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Shizuku ADB Setup (Privileged System Ops)</Text>
+
+                      <View style={styles.termuxGuideCard}>
+                        <View style={styles.guideStep}>
+                          <View style={styles.stepNumCircle}>
+                            <Text style={styles.stepNumText}>1</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.guideStepTitle}>Pasang Aplikasi Shizuku</Text>
+                            <Text style={styles.guideStepDesc}>
+                              Install Shizuku dari Google Play Store atau GitHub Releases untuk memberikan hak akses ADB tanpa root.
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.linkBtn}
+                              onPress={() => Linking.openURL("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")}
+                            >
+                              <ExternalLink size={12} color="#38bdf8" />
+                              <Text style={styles.linkBtnText}>Buka Shizuku di Google Play</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <View style={styles.guideStep}>
+                          <View style={styles.stepNumCircle}>
+                            <Text style={styles.stepNumText}>2</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.guideStepTitle}>Start via Wireless Debugging</Text>
+                            <Text style={styles.guideStepDesc}>
+                              Aktifkan Developer Options &gt; Wireless Debugging di Android, lalu pairing dan klik "Start" di aplikasi Shizuku.
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.guideStep}>
+                          <View style={styles.stepNumCircle}>
+                            <Text style={styles.stepNumText}>3</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.guideStepTitle}>Otorisasi Const AI Mobile</Text>
+                            <Text style={styles.guideStepDesc}>
+                              Buka Shizuku &gt; "Authorized Applications" &gt; Centang dan aktifkan izin untuk Const AI.
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* SECTION 3: Accessibility Spatial Operator Setup */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Accessibility Service Setup (Visual Screen Operator)</Text>
+
+                      <View style={styles.termuxGuideCard}>
+                        <View style={styles.guideStep}>
+                          <View style={styles.stepNumCircle}>
+                            <Text style={styles.stepNumText}>1</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.guideStepTitle}>Buka Pengaturan Aksesibilitas Android</Text>
+                            <Text style={styles.guideStepDesc}>
+                              Buka Pengaturan HP &gt; Accessibility (Aksesibilitas) &gt; Downloaded Apps / Installed Services.
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.guideStep}>
+                          <View style={styles.stepNumCircle}>
+                            <Text style={styles.stepNumText}>2</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.guideStepTitle}>Aktifkan "Const AI Accessibility Service"</Text>
+                            <Text style={styles.guideStepDesc}>
+                              Aktifkan toggle untuk memberikan izin visual click, gesture tap, swipe, dan pembacaan hierarki layar UI.
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* SECTION 4: System Services Status */}
                     <View style={styles.section}>
                       <Text style={styles.sectionTitle}>Status Layanan Sistem</Text>
                       <View style={styles.serviceStatusCard}>
+                        <View style={styles.serviceRow}>
+                          <Text style={styles.serviceLabel}>Termux Linux Shell</Text>
+                          <View style={styles.serviceBadgeOk}>
+                            <Text style={styles.serviceBadgeOkText}>Ready</Text>
+                          </View>
+                        </View>
                         <View style={styles.serviceRow}>
                           <Text style={styles.serviceLabel}>Shizuku Privileged ADB</Text>
                           <View style={styles.serviceBadgeOk}>
@@ -1058,12 +1145,6 @@ export const SettingsModal: React.FC = () => {
                           <Text style={styles.serviceLabel}>Accessibility Spatial Tap</Text>
                           <View style={styles.serviceBadgeOk}>
                             <Text style={styles.serviceBadgeOkText}>Enabled</Text>
-                          </View>
-                        </View>
-                        <View style={styles.serviceRow}>
-                          <Text style={styles.serviceLabel}>Supertonic Neural Voice</Text>
-                          <View style={styles.serviceBadgeOk}>
-                            <Text style={styles.serviceBadgeOkText}>ONNX Ready</Text>
                           </View>
                         </View>
                         <View style={styles.serviceRow}>
