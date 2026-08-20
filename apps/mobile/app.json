@@ -25,7 +25,6 @@
       "package": "com.constai.mobile"
     },
     "plugins": [
-      "expo-dev-client",
       "expo-router",
       "expo-secure-store",
       "expo-web-browser"
