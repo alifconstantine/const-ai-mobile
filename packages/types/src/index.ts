@@ -383,3 +383,49 @@ export interface DeviceInfo {
   storageFreeGb?: number;
   storageTotalGb?: number;
 }
+
+// ==========================================
+// 8. Workspace & Projects (Dynamic Context)
+// ==========================================
+
+export type WorkspaceType = "standalone" | "project_folder";
+
+export interface WorkspaceMetadata {
+  id: string;
+  path: string;
+  title: string;
+  type: WorkspaceType;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface ProjectFileNode {
+  id: string;
+  name: string;
+  path: string;
+  isFolder: boolean;
+  sizeBytes?: number;
+  type?: "code" | "text" | "json" | "web" | "binary";
+  lastModified?: number;
+  children?: ProjectFileNode[];
+}
+
+// ==========================================
+// 9. LLM Execution Telemetry & Precision Metrics
+// ==========================================
+
+export interface ExecutionTelemetry {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  totalDurationMs: number;
+  ttftMs?: number;
+  tokensPerSec?: number;
+  estimatedCostUsd?: number;
+}
+
+export interface ModelPricing {
+  promptPerMillion: number;
+  completionPerMillion: number;
+}
+

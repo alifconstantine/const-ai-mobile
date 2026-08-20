@@ -312,6 +312,8 @@ export function buildSystemPrompt(options: {
   persona?: string;
   operatingMode?: string;
   platform?: string;
+  workspaceType?: "standalone" | "project_folder";
+  workingDirectory?: string;
   memories?: Array<{ key: string; value: string; category: string }>;
   activeModel?: string;
 }): string {
@@ -319,6 +321,8 @@ export function buildSystemPrompt(options: {
     persona = "You are Const AI, a fast, proactive, and intelligent personal phone assistant and OS operator.",
     operatingMode = "normal_mode",
     platform = "android",
+    workspaceType = "standalone",
+    workingDirectory,
     memories = [],
     activeModel = "auto",
   } = options;
@@ -328,6 +332,13 @@ export function buildSystemPrompt(options: {
     memoryContext = `\n\n### User Long-Term Memories & Preferences:\n${memories
       .map((m) => `- [${m.category}] ${m.key}: ${m.value}`)
       .join("\n")}`;
+  }
+
+  let workspaceContext = "";
+  if (workspaceType === "project_folder" && workingDirectory) {
+    workspaceContext = `\n- Workspace Mode: Project Folder (Bound to active project)\n- Working Directory: ${workingDirectory} (Always use or reference this directory when executing terminal scripts or inspecting project files)`;
+  } else {
+    workspaceContext = `\n- Workspace Mode: Standalone (General conversation without bound project directory)`;
   }
 
   let modeSpecificRules = "";
@@ -353,7 +364,7 @@ export function buildSystemPrompt(options: {
 ### Operational Context:
 - Operating Platform: ${platform}
 - Active Operating Mode: ${operatingMode}
-- Active Model: ${activeModel}
+- Active Model: ${activeModel}${workspaceContext}
 - Current Date/Time: ${new Date().toISOString()}
 
 ### Operating Rules:${modeSpecificRules}
@@ -365,3 +376,4 @@ export function buildSystemPrompt(options: {
      3. Berikan izin "Run commands in Termux" di Pengaturan Aplikasi Android atau buka menu Settings > Termux Setup di aplikasi.
 3. **Response Style**: Be concise, helpful, and natural.${memoryContext}`;
 }
+

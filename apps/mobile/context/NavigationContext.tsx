@@ -129,6 +129,8 @@ interface NavigationContextType {
 
   // Active Session & Selections
   activeWorkspace: string;
+  activeWorkspaceType: "standalone" | "project_folder";
+  activeWorkingDirectory: string;
   activeConversationId: string;
   activeTaskTitle: string;
   activeModel: string;
@@ -194,7 +196,6 @@ interface NavigationContextType {
   setModelSelectorModalOpen: (open: boolean) => void;
   setContextMeterOpen: (open: boolean) => void;
 
-
   setPlusMenuOpen: (open: boolean) => void;
   setMentionOpen: (open: boolean) => void;
   setSlashCommandOpen: (open: boolean) => void;
@@ -206,6 +207,8 @@ interface NavigationContextType {
   setActiveTabId: (id: string) => void;
 
   setActiveWorkspace: (workspace: string) => void;
+  setActiveWorkspaceType: (type: "standalone" | "project_folder") => void;
+  setActiveWorkingDirectory: (dir: string) => void;
   setActiveConversationId: (id: string) => void;
   setActiveTaskTitle: (title: string) => void;
   setActiveModel: (model: string) => void;
@@ -216,7 +219,16 @@ interface NavigationContextType {
   setCustomBaseUrl: (url: string) => void;
 
   selectTask: (task: TaskItem) => void;
-  createNewConversation: (title?: string) => Promise<string | null>;
+  createNewConversation: (
+    title?: string,
+    workspaceType?: "standalone" | "project_folder",
+    workingDirectory?: string
+  ) => Promise<string | null>;
+  setConversationWorkspace: (
+    workspaceType: "standalone" | "project_folder",
+    workingDirectory?: string
+  ) => Promise<boolean>;
+  addCustomWorkspace: (name: string, path: string) => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(
@@ -279,6 +291,8 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [promptInput, setPromptInput] = useState("");
 
   const [activeWorkspace, setActiveWorkspace] = useState<string>("const-ai-mobile");
+  const [activeWorkspaceType, setActiveWorkspaceType] = useState<"standalone" | "project_folder">("standalone");
+  const [activeWorkingDirectory, setActiveWorkingDirectory] = useState<string>("/data/data/com.termux/files/home/projects");
   const [activeConversationId, setActiveConversationId] = useState<string>("");
   const [activeTaskTitle, setActiveTaskTitle] = useState<string>("New Task");
   const [activeModel, setActiveModel] = useState<string>("");
@@ -303,6 +317,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const syncClerkUserMutation = useMutation(api.users.syncClerkUser);
   const updateProfileMutation = useMutation(api.users.updateProfile);
   const updateUserConfigMutation = useMutation(api.users.updateUserConfig);
+  const updateConvWorkspaceMutation = useMutation(api.conversations.updateConversationWorkspace);
   const createConv = useMutation(api.conversations.createConversation);
 
   // Real-time reactive synchronization of user config from Convex
@@ -356,11 +371,18 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
     }
   }, [liveUserConfig]);
 
-  // Auto-select latest conversation on initial load if none selected
+  // Auto-select latest conversation on initial load if none selected & sync workspace info
   useEffect(() => {
     if (!activeConversationId && allConversations && allConversations.length > 0) {
-      setActiveConversationId(allConversations[0]._id);
-      setActiveTaskTitle(allConversations[0].title);
+      const first = allConversations[0];
+      setActiveConversationId(first._id);
+      setActiveTaskTitle(first.title);
+      if (first.workspaceType) {
+        setActiveWorkspaceType(first.workspaceType as any);
+      }
+      if (first.workingDirectory) {
+        setActiveWorkingDirectory(first.workingDirectory);
+      }
     }
   }, [allConversations, activeConversationId]);
 
@@ -608,20 +630,79 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
     if (task.projectName) {
       setActiveWorkspace(task.projectName);
     }
+    const matchedConv = allConversations?.find((c) => c._id === task.id);
+    if (matchedConv) {
+      if (matchedConv.workspaceType) {
+        setActiveWorkspaceType(matchedConv.workspaceType as any);
+      }
+      if (matchedConv.workingDirectory) {
+        setActiveWorkingDirectory(matchedConv.workingDirectory);
+      }
+    }
     setIsTaskDrawerOpen(false);
   };
 
+  const setConversationWorkspace = async (
+    workspaceType: "standalone" | "project_folder",
+    workingDirectory?: string
+  ): Promise<boolean> => {
+    setActiveWorkspaceType(workspaceType);
+    if (workingDirectory) {
+      setActiveWorkingDirectory(workingDirectory);
+    }
+    if (activeConversationId && !activeConversationId.startsWith("local_")) {
+      try {
+        await updateConvWorkspaceMutation({
+          conversationId: activeConversationId as any,
+          workspaceType,
+          workingDirectory,
+        });
+        return true;
+      } catch (err) {
+        console.warn("Failed to update conversation workspace in Convex:", err);
+      }
+    }
+    return true;
+  };
+
+  const addCustomWorkspace = (name: string, path: string) => {
+    const newWs: WorkspaceItem = {
+      id: `ws-${Date.now()}`,
+      name,
+      path,
+      isCurrent: true,
+    };
+    setWorkspaces((prev) => [
+      ...prev.map((w) => ({ ...w, isCurrent: false })),
+      newWs,
+    ]);
+    setActiveWorkspace(name);
+    setActiveWorkspaceType("project_folder");
+    setActiveWorkingDirectory(path);
+  };
+
   const createNewConversation = async (
-    title: string = "New Task"
+    title: string = "New Task",
+    workspaceType?: "standalone" | "project_folder",
+    workingDirectory?: string
   ): Promise<string | null> => {
+    const wsType = workspaceType || activeWorkspaceType;
+    const workDir = workingDirectory || activeWorkingDirectory;
+
     try {
       const convId = await createConv({
         userId: currentUserId ? (currentUserId as any) : undefined,
         title,
+        workspaceType: wsType,
+        workingDirectory: wsType === "project_folder" ? workDir : undefined,
       });
       if (convId) {
         setActiveConversationId(convId);
         setActiveTaskTitle(title);
+        setActiveWorkspaceType(wsType);
+        if (wsType === "project_folder" && workDir) {
+          setActiveWorkingDirectory(workDir);
+        }
         return convId;
       }
     } catch (err) {
@@ -630,11 +711,17 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
     const fallbackId = `local_conv_${Date.now()}`;
     setActiveConversationId(fallbackId);
     setActiveTaskTitle(title);
+    setActiveWorkspaceType(wsType);
     return fallbackId;
   };
 
   const handleSetWorkspace = (workspaceName: string) => {
     setActiveWorkspace(workspaceName);
+    const matched = workspaces.find((w) => w.name === workspaceName);
+    if (matched && matched.path) {
+      setActiveWorkspaceType("project_folder");
+      setActiveWorkingDirectory(matched.path);
+    }
     setWorkspaces((prev) =>
       prev.map((ws) => ({
         ...ws,
@@ -694,9 +781,18 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         isWorkspaceModalOpen,
         isOverflowMenuOpen,
         isSettingsModalOpen,
+        settingsInitialTab,
+        setSettingsInitialTab,
+        openSettingsTab: (tab: "profile" | "models" | "mode" | "system") => {
+          setSettingsInitialTab(tab);
+          setIsSettingsModalOpen(true);
+        },
         isOperatingModeModalOpen,
+        setModelSelectorModalOpen: setIsModelSelectorModalOpen,
+        setOperatingModeModalOpen: setIsOperatingModeModalOpen,
         isModelSelectorModalOpen,
         isContextMeterOpen,
+        setContextMeterOpen: setIsContextMeterOpen,
 
         isPlusMenuOpen,
         isMentionOpen,
@@ -704,6 +800,8 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         promptInput,
 
         activeWorkspace,
+        activeWorkspaceType,
+        activeWorkingDirectory,
         activeConversationId,
         activeTaskTitle,
         activeModel,
@@ -737,16 +835,6 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         setWorkspaceModalOpen: setIsWorkspaceModalOpen,
         setOverflowMenuOpen: setIsOverflowMenuOpen,
         setSettingsModalOpen: setIsSettingsModalOpen,
-        settingsInitialTab,
-        setSettingsInitialTab,
-        openSettingsTab: (tab: "profile" | "models" | "mode" | "system") => {
-          setSettingsInitialTab(tab);
-          setIsSettingsModalOpen(true);
-        },
-        setOperatingModeModalOpen: setIsOperatingModeModalOpen,
-        setModelSelectorModalOpen: setIsModelSelectorModalOpen,
-        setContextMeterOpen: setIsContextMeterOpen,
-
 
         setPlusMenuOpen: setIsPlusMenuOpen,
         setMentionOpen: setIsMentionOpen,
@@ -765,6 +853,8 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         },
 
         setActiveWorkspace: handleSetWorkspace,
+        setActiveWorkspaceType,
+        setActiveWorkingDirectory,
         setActiveConversationId,
         setActiveTaskTitle,
         setActiveModel,
@@ -776,6 +866,8 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
 
         selectTask,
         createNewConversation,
+        setConversationWorkspace,
+        addCustomWorkspace,
       }}
     >
       {children}

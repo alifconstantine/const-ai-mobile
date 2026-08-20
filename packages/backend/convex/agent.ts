@@ -61,9 +61,13 @@ export const sendMessage = action({
     });
 
     try {
-      // 2. Fetch User Config & Message History
+      // 2. Fetch User Config, Message History, and Conversation Info
       const userConfig = await ctx.runQuery(api.users.getUserConfig, {
         userId: args.userId,
+      });
+
+      const conversation: any = await ctx.runQuery(api.conversations.getConversation, {
+        conversationId: args.conversationId,
       });
 
       const history = await ctx.runQuery(api.messages.listMessages, {
@@ -158,6 +162,8 @@ export const sendMessage = action({
         operatingMode,
         activeModel,
         platform: "android",
+        workspaceType: conversation?.workspaceType,
+        workingDirectory: conversation?.workingDirectory,
       });
 
       const messages: LLMMessage[] = [
@@ -217,6 +223,10 @@ export const sendMessage = action({
             modelUsed: llmResponse.modelUsed,
             promptTokens: llmResponse.usage?.promptTokens,
             completionTokens: llmResponse.usage?.completionTokens,
+            totalDurationMs: llmResponse.telemetry?.totalDurationMs,
+            ttftMs: llmResponse.telemetry?.ttftMs,
+            tokensPerSec: llmResponse.telemetry?.tokensPerSec,
+            costUsd: llmResponse.usage?.estimatedCostUsd,
           }
         );
 
@@ -241,7 +251,16 @@ export const sendMessage = action({
 
     for (const tc of llmResponse.toolCalls) {
       const toolName = tc.name as ConstToolName;
-      const toolArgs = tc.arguments;
+      const toolArgs = { ...tc.arguments };
+
+      // Apply conversation default working directory if not specified
+      if (
+        (toolName === "termux_runScript" || toolName === "shizuku_executeCommand") &&
+        !toolArgs.workingDir &&
+        conversation?.workingDirectory
+      ) {
+        toolArgs.workingDir = conversation.workingDirectory;
+      }
 
       // Evaluate against operating mode
       const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
@@ -296,6 +315,10 @@ export const sendMessage = action({
         modelUsed: llmResponse.modelUsed,
         promptTokens: llmResponse.usage?.promptTokens,
         completionTokens: llmResponse.usage?.completionTokens,
+        totalDurationMs: llmResponse.telemetry?.totalDurationMs,
+        ttftMs: llmResponse.telemetry?.ttftMs,
+        tokensPerSec: llmResponse.telemetry?.tokensPerSec,
+        costUsd: llmResponse.usage?.estimatedCostUsd,
       }
     );
 
@@ -463,10 +486,17 @@ export const submitToolResult = action({
         };
       }
 
+      // Fetch conversation info
+      const conversation: any = await ctx.runQuery(api.conversations.getConversation, {
+        conversationId: args.conversationId,
+      });
+
       const systemPrompt = buildSystemPrompt({
         operatingMode,
         activeModel,
         platform: "android",
+        workspaceType: conversation?.workspaceType,
+        workingDirectory: conversation?.workingDirectory,
       });
 
       const messages: LLMMessage[] = [
@@ -527,7 +557,16 @@ export const submitToolResult = action({
 
         for (const tc of continuation.toolCalls) {
           const toolName = tc.name as ConstToolName;
-          const toolArgs = tc.arguments;
+          const toolArgs = { ...tc.arguments };
+
+          if (
+            (toolName === "termux_runScript" || toolName === "shizuku_executeCommand") &&
+            !toolArgs.workingDir &&
+            conversation?.workingDirectory
+          ) {
+            toolArgs.workingDir = conversation.workingDirectory;
+          }
+
           const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
 
           if (policy.decision === "deny") {
@@ -577,6 +616,10 @@ export const submitToolResult = action({
             modelUsed: continuation.modelUsed,
             promptTokens: continuation.usage?.promptTokens,
             completionTokens: continuation.usage?.completionTokens,
+            totalDurationMs: continuation.telemetry?.totalDurationMs,
+            ttftMs: continuation.telemetry?.ttftMs,
+            tokensPerSec: continuation.telemetry?.tokensPerSec,
+            costUsd: continuation.usage?.estimatedCostUsd,
           }
         );
 
@@ -611,6 +654,10 @@ export const submitToolResult = action({
           modelUsed: continuation.modelUsed,
           promptTokens: continuation.usage?.promptTokens,
           completionTokens: continuation.usage?.completionTokens,
+          totalDurationMs: continuation.telemetry?.totalDurationMs,
+          ttftMs: continuation.telemetry?.ttftMs,
+          tokensPerSec: continuation.telemetry?.tokensPerSec,
+          costUsd: continuation.usage?.estimatedCostUsd,
         }
       );
 

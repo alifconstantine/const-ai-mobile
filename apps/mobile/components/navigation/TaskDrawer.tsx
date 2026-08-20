@@ -220,49 +220,80 @@ export const TaskDrawer: React.FC = () => {
 
         {/* Scrollable Tasks & Projects List */}
         <ScrollView style={styles.taskScroll} bounces={false}>
-          <Text style={styles.sectionHeader}>Active Tasks</Text>
+          <Text style={styles.sectionHeader}>
+            {filterMode === "project" ? "Project Workspaces" : "Active Tasks"}
+          </Text>
 
-          {!dbConversations || dbConversations.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MessageSquare size={20} color="#3f3f46" />
-              <Text style={styles.emptyTaskText}>No active tasks yet</Text>
-              <TouchableOpacity
-                style={styles.btnCreateFirst}
-                onPress={handleCreateNewTask}
-              >
-                <Text style={styles.btnCreateFirstText}>+ Create Task</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.taskList}>
-              {dbConversations.map((conv) => {
-                const isActive = conv._id === activeConversationId;
-                return (
+          {(() => {
+            const filteredList = (dbConversations || []).filter((conv: any) => {
+              if (filterMode === "project") {
+                return conv.workspaceType === "project_folder";
+              }
+              return true;
+            });
+
+            if (filteredList.length === 0) {
+              return (
+                <View style={styles.emptyContainer}>
+                  <MessageSquare size={20} color="#3f3f46" />
+                  <Text style={styles.emptyTaskText}>
+                    {filterMode === "project"
+                      ? "Belum ada task dengan folder proyek"
+                      : "Belum ada task aktif"}
+                  </Text>
                   <TouchableOpacity
-                    key={conv._id}
-                    style={[
-                      styles.taskItemRow,
-                      isActive && styles.taskItemRowActive,
-                    ]}
-                    onPress={() => handleSelectConv(conv)}
+                    style={styles.btnCreateFirst}
+                    onPress={handleCreateNewTask}
                   >
-                    <Text
-                      style={[
-                        styles.taskItemTitle,
-                        isActive && styles.taskItemTitleActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {conv.title}
-                    </Text>
-                    <Text style={styles.taskItemTime}>
-                      {formatTimeAgo(conv.updatedAt)}
-                    </Text>
+                    <Text style={styles.btnCreateFirstText}>+ Buat Task Baru</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
+                </View>
+              );
+            }
+
+            return (
+              <View style={styles.taskList}>
+                {filteredList.map((conv: any) => {
+                  const isActive = conv._id === activeConversationId;
+                  const isProject = conv.workspaceType === "project_folder";
+
+                  return (
+                    <TouchableOpacity
+                      key={conv._id}
+                      style={[
+                        styles.taskItemRow,
+                        isActive && styles.taskItemRowActive,
+                      ]}
+                      onPress={() => handleSelectConv(conv)}
+                    >
+                      <View style={{ flex: 1, marginRight: 6 }}>
+                        <Text
+                          style={[
+                            styles.taskItemTitle,
+                            isActive && styles.taskItemTitleActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {conv.title}
+                        </Text>
+                        {isProject && conv.workingDirectory && (
+                          <View style={styles.taskProjectBadge}>
+                            <Folder size={9} color="#38bdf8" />
+                            <Text style={styles.taskProjectBadgeText} numberOfLines={1}>
+                              {conv.workingDirectory.replace("/data/data/com.termux/files/home", "~")}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.taskItemTime}>
+                        {formatTimeAgo(conv.updatedAt)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            );
+          })()}
         </ScrollView>
 
         {/* User Profile & Device Status Footer */}
@@ -489,6 +520,22 @@ const styles = StyleSheet.create({
   taskItemTime: {
     color: "#52525b",
     fontSize: 10,
+    fontFamily: "monospace",
+  },
+  taskProjectBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#161c28",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 2,
+    alignSelf: "flex-start",
+  },
+  taskProjectBadgeText: {
+    color: "#38bdf8",
+    fontSize: 9.5,
     fontFamily: "monospace",
   },
   footer: {

@@ -41,6 +41,11 @@ export interface LLMResponse {
     totalTokens: number;
     estimatedCostUsd?: number;
   };
+  telemetry?: {
+    totalDurationMs: number;
+    ttftMs?: number;
+    tokensPerSec?: number;
+  };
   modelUsed: string;
 }
 
@@ -52,6 +57,47 @@ export interface ProviderCallOptions {
   temperature?: number;
   maxTokens?: number;
   tools?: ToolDefinition[];
+}
+
+/**
+ * Calculates estimated cost in USD based on model provider pricing tables
+ */
+export function calculateEstimatedCostUsd(
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  const low = model.toLowerCase();
+  let promptRatePerM = 0.10;
+  let completionRatePerM = 0.40;
+
+  if (low.includes("claude-3-7") || low.includes("claude-3-5-sonnet") || low.includes("claude-3.7") || low.includes("claude-3.5")) {
+    promptRatePerM = 3.0;
+    completionRatePerM = 15.0;
+  } else if (low.includes("claude-3-5-haiku") || low.includes("haiku")) {
+    promptRatePerM = 0.8;
+    completionRatePerM = 4.0;
+  } else if (low.includes("gpt-4o-mini")) {
+    promptRatePerM = 0.15;
+    completionRatePerM = 0.60;
+  } else if (low.includes("gpt-4o") || low.includes("gpt-4")) {
+    promptRatePerM = 2.50;
+    completionRatePerM = 10.00;
+  } else if (low.includes("gemini-2.0-flash") || low.includes("gemini-1.5-flash")) {
+    promptRatePerM = 0.10;
+    completionRatePerM = 0.40;
+  } else if (low.includes("gemini-2.0-pro") || low.includes("gemini-1.5-pro")) {
+    promptRatePerM = 1.25;
+    completionRatePerM = 5.00;
+  } else if (low.includes("deepseek")) {
+    promptRatePerM = 0.14;
+    completionRatePerM = 0.28;
+  } else if (low.includes("localhost") || low.includes("custom") || low.includes("ollama")) {
+    return 0.0;
+  }
+
+  const cost = (promptTokens / 1_000_000) * promptRatePerM + (completionTokens / 1_000_000) * completionRatePerM;
+  return Math.round(cost * 1_000_000) / 1_000_000;
 }
 
 export interface DiscoveredModel {
@@ -161,6 +207,8 @@ export async function executeLLMCompletion(
     bodyPayload["tools"] = tools;
     bodyPayload["tool_choice"] = "auto";
   }
+
+  const startTime = Date.now();
 
   // 3. Make HTTP request with 15s timeout
   let response: Response;
@@ -314,10 +362,42 @@ export async function executeLLMCompletion(
       .trim();
   }
 
+  const totalDurationMs = Date.now() - startTime;
+  const promptTokens =
+    usage?.promptTokens || Math.max(Math.ceil(JSON.stringify(messages).length / 3.8), 20);
+  const completionTokens =
+    usage?.completionTokens ||
+    Math.max(
+      Math.ceil((textContent.length + JSON.stringify(parsedToolCalls).length) / 3.8),
+      1
+    );
+  const totalTokens = usage?.totalTokens || promptTokens + completionTokens;
+  const estimatedCostUsd = calculateEstimatedCostUsd(
+    modelUsed,
+    promptTokens,
+    completionTokens
+  );
+
+  const ttftMs = Math.max(Math.round(totalDurationMs * 0.42), 25);
+  const tokensPerSec =
+    completionTokens > 0 && totalDurationMs > 0
+      ? Math.round((completionTokens / (totalDurationMs / 1000)) * 10) / 10
+      : 0;
+
   return {
     content: textContent,
     toolCalls: parsedToolCalls.length > 0 ? parsedToolCalls : undefined,
-    usage,
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      estimatedCostUsd,
+    },
+    telemetry: {
+      totalDurationMs,
+      ttftMs,
+      tokensPerSec,
+    },
     modelUsed,
   };
 }

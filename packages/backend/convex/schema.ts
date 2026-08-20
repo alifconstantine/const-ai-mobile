@@ -163,6 +163,12 @@ export default defineSchema({
     userId: v.id("users"),
     title: v.string(),
     isPinned: v.boolean(),
+    workspaceType: v.optional(
+      v.union(v.literal("standalone"), v.literal("project_folder"))
+    ),
+    workingDirectory: v.optional(v.string()),
+    totalTokens: v.optional(v.number()),
+    totalSpendUsd: v.optional(v.number()),
     currentPlanId: v.optional(v.id("implementationPlans")),
     targetRunnerDeviceId: v.optional(v.id("devices")),
     createdAt: v.number(),
@@ -228,6 +234,9 @@ export default defineSchema({
     modelUsed: v.optional(v.string()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    totalDurationMs: v.optional(v.number()),
+    ttftMs: v.optional(v.number()),
+    tokensPerSec: v.optional(v.number()),
     costUsd: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_conversation", ["conversationId"]),

@@ -53,6 +53,9 @@ export const insertMessage = mutation({
     modelUsed: v.optional(v.string()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    totalDurationMs: v.optional(v.number()),
+    ttftMs: v.optional(v.number()),
+    tokensPerSec: v.optional(v.number()),
     costUsd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -65,14 +68,25 @@ export const insertMessage = mutation({
       modelUsed: args.modelUsed,
       promptTokens: args.promptTokens,
       completionTokens: args.completionTokens,
+      totalDurationMs: args.totalDurationMs,
+      ttftMs: args.ttftMs,
+      tokensPerSec: args.tokensPerSec,
       costUsd: args.costUsd,
       createdAt: now,
     });
 
-    // Update conversation updatedAt timestamp
-    await ctx.db.patch(args.conversationId, {
-      updatedAt: now,
-    });
+    // Update conversation updatedAt timestamp and accumulate stats
+    const conv = await ctx.db.get(args.conversationId);
+    if (conv) {
+      const addedTokens = (args.promptTokens || 0) + (args.completionTokens || 0);
+      const currentTokens = conv.totalTokens || 0;
+      const currentSpend = conv.totalSpendUsd || 0;
+      await ctx.db.patch(args.conversationId, {
+        updatedAt: now,
+        totalTokens: currentTokens + addedTokens,
+        totalSpendUsd: currentSpend + (args.costUsd || 0),
+      });
+    }
 
     return messageId;
   },

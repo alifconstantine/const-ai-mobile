@@ -15,12 +15,38 @@ import {
   Folder,
   Check,
   FolderOpen,
-  Cloud,
   Globe,
   X,
   Plus,
+  Terminal,
+  Smartphone,
+  HardDrive,
+  MessageSquare,
 } from "lucide-react-native";
 import { useNavigation, WorkspaceItem } from "../../context/NavigationContext";
+
+const PRESET_DIRECTORIES = [
+  {
+    name: "Termux Projects (~/projects)",
+    path: "/data/data/com.termux/files/home/projects",
+    icon: Terminal,
+  },
+  {
+    name: "Termux Home (~)",
+    path: "/data/data/com.termux/files/home",
+    icon: Terminal,
+  },
+  {
+    name: "Download Storage (/sdcard/Download)",
+    path: "/sdcard/Download",
+    icon: HardDrive,
+  },
+  {
+    name: "Android Shared Storage (/sdcard)",
+    path: "/sdcard",
+    icon: Smartphone,
+  },
+];
 
 export const WorkspaceModal: React.FC = () => {
   const {
@@ -28,17 +54,54 @@ export const WorkspaceModal: React.FC = () => {
     setWorkspaceModalOpen,
     workspaces,
     activeWorkspace,
+    activeWorkspaceType,
+    activeWorkingDirectory,
     setActiveWorkspace,
+    setConversationWorkspace,
+    createNewConversation,
+    addCustomWorkspace,
   } = useNavigation();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [isAddingCustomPath, setIsAddingCustomPath] = useState(false);
+  const [customPathInput, setCustomPathInput] = useState("");
+  const [customNameInput, setCustomNameInput] = useState("");
 
   const filteredWorkspaces = workspaces.filter((ws) =>
     ws.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSelectWorkspace = (ws: WorkspaceItem) => {
+  const handleSelectStandalone = async () => {
+    await setConversationWorkspace("standalone", undefined);
+    setActiveWorkspace("Standalone Chat");
+    setWorkspaceModalOpen(false);
+  };
+
+  const handleSelectWorkspace = async (ws: WorkspaceItem) => {
+    await setConversationWorkspace("project_folder", ws.path);
     setActiveWorkspace(ws.name);
+    setWorkspaceModalOpen(false);
+  };
+
+  const handleSelectPreset = async (preset: { name: string; path: string }) => {
+    await setConversationWorkspace("project_folder", preset.path);
+    addCustomWorkspace(preset.name.split(" (")[0], preset.path);
+    setWorkspaceModalOpen(false);
+  };
+
+  const handleSaveCustomPath = async () => {
+    if (!customPathInput.trim()) return;
+    const path = customPathInput.trim();
+    const name =
+      customNameInput.trim() ||
+      path.split("/").filter(Boolean).pop() ||
+      "Project Folder";
+
+    addCustomWorkspace(name, path);
+    await setConversationWorkspace("project_folder", path);
+    setIsAddingCustomPath(false);
+    setCustomPathInput("");
+    setCustomNameInput("");
     setWorkspaceModalOpen(false);
   };
 
@@ -58,11 +121,10 @@ export const WorkspaceModal: React.FC = () => {
                 <Search size={14} color="#71717a" style={styles.searchIcon} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search workspaces"
+                  placeholder="Cari workspace / folder..."
                   placeholderTextColor="#71717a"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  autoFocus
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -72,10 +134,53 @@ export const WorkspaceModal: React.FC = () => {
               </View>
 
               <ScrollView style={styles.listContainer} bounces={false}>
-                {/* Workspaces List */}
+                {/* 1. Mode Standalone / Tanpa Folder */}
                 <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>MODE OBROLAN</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.itemRow,
+                      activeWorkspaceType === "standalone" && styles.itemRowActive,
+                    ]}
+                    onPress={handleSelectStandalone}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.itemLeft}>
+                      <MessageSquare
+                        size={15}
+                        color={activeWorkspaceType === "standalone" ? "#38bdf8" : "#a1a1aa"}
+                        style={styles.itemIcon}
+                      />
+                      <View>
+                        <Text
+                          style={[
+                            styles.itemText,
+                            activeWorkspaceType === "standalone" && styles.itemTextActive,
+                          ]}
+                        >
+                          Tanpa Folder (Standalone)
+                        </Text>
+                        <Text style={styles.itemSubText}>
+                          Obrolan asisten umum tanpa terikat direktori lokal
+                        </Text>
+                      </View>
+                    </View>
+                    {activeWorkspaceType === "standalone" && (
+                      <Check size={15} color="#38bdf8" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.separator} />
+
+                {/* 2. Registered Workspaces */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>PROJECT WORKSPACES (DALAM FOLDER)</Text>
                   {filteredWorkspaces.map((ws) => {
-                    const isSelected = ws.name === activeWorkspace;
+                    const isSelected =
+                      activeWorkspaceType === "project_folder" &&
+                      (ws.name === activeWorkspace || ws.path === activeWorkingDirectory);
+
                     return (
                       <TouchableOpacity
                         key={ws.id}
@@ -86,19 +191,25 @@ export const WorkspaceModal: React.FC = () => {
                         <View style={styles.itemLeft}>
                           <Folder
                             size={15}
-                            color={isSelected ? "#e4e4e7" : "#a1a1aa"}
+                            color={isSelected ? "#38bdf8" : "#a1a1aa"}
                             style={styles.itemIcon}
                           />
-                          <Text
-                            style={[
-                              styles.itemText,
-                              isSelected && styles.itemTextActive,
-                            ]}
-                          >
-                            {ws.name}
-                          </Text>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                styles.itemText,
+                                isSelected && styles.itemTextActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {ws.name}
+                            </Text>
+                            <Text style={styles.itemSubText} numberOfLines={1}>
+                              {ws.path}
+                            </Text>
+                          </View>
                         </View>
-                        {isSelected && <Check size={15} color="#e4e4e7" />}
+                        {isSelected && <Check size={15} color="#38bdf8" />}
                       </TouchableOpacity>
                     );
                   })}
@@ -106,34 +217,76 @@ export const WorkspaceModal: React.FC = () => {
 
                 <View style={styles.separator} />
 
-                {/* Quick Workspace Actions */}
+                {/* 3. Quick Folder Presets */}
                 <View style={styles.section}>
-                  <TouchableOpacity
-                    style={styles.actionRow}
-                    onPress={() => setWorkspaceModalOpen(false)}
-                    activeOpacity={0.7}
-                  >
-                    <FolderOpen size={15} color="#a1a1aa" style={styles.itemIcon} />
-                    <Text style={styles.actionText}>Open folder</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.sectionLabel}>FOLDER PRESET CEPAT</Text>
+                  {PRESET_DIRECTORIES.map((preset, idx) => {
+                    const Icon = preset.icon;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.presetRow}
+                        onPress={() => handleSelectPreset(preset)}
+                        activeOpacity={0.7}
+                      >
+                        <Icon size={14} color="#71717a" style={styles.itemIcon} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.presetName}>{preset.name}</Text>
+                          <Text style={styles.presetPath} numberOfLines={1}>
+                            {preset.path}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-                  <TouchableOpacity
-                    style={styles.actionRow}
-                    onPress={() => setWorkspaceModalOpen(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Cloud size={15} color="#a1a1aa" style={styles.itemIcon} />
-                    <Text style={styles.actionText}>Remote connection</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.actionRow}
-                    onPress={() => setWorkspaceModalOpen(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Globe size={15} color="#a1a1aa" style={styles.itemIcon} />
-                    <Text style={styles.actionText}>Work outside a project</Text>
-                  </TouchableOpacity>
+                {/* 4. Custom Path Input */}
+                <View style={styles.customPathSection}>
+                  {isAddingCustomPath ? (
+                    <View style={styles.customPathForm}>
+                      <Text style={styles.customPathTitle}>Tambah Folder Proyek Kustom</Text>
+                      <TextInput
+                        style={styles.customInput}
+                        placeholder="Nama Proyek (misal: my-app)"
+                        placeholderTextColor="#71717a"
+                        value={customNameInput}
+                        onChangeText={setCustomNameInput}
+                      />
+                      <TextInput
+                        style={styles.customInput}
+                        placeholder="Path Folder (misal: ~/projects/my-app)"
+                        placeholderTextColor="#71717a"
+                        value={customPathInput}
+                        onChangeText={setCustomPathInput}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <View style={styles.customPathBtnRow}>
+                        <TouchableOpacity
+                          style={styles.btnCancel}
+                          onPress={() => setIsAddingCustomPath(false)}
+                        >
+                          <Text style={styles.btnCancelText}>Batal</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.btnSave}
+                          onPress={handleSaveCustomPath}
+                        >
+                          <Text style={styles.btnSaveText}>Buka Folder</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.addFolderBtn}
+                      onPress={() => setIsAddingCustomPath(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Plus size={14} color="#38bdf8" />
+                      <Text style={styles.addFolderBtnText}>+ Input Path Folder Lain</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </ScrollView>
             </View>
@@ -147,34 +300,34 @@ export const WorkspaceModal: React.FC = () => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-start",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
     alignItems: "center",
-    paddingTop: 52,
+    paddingHorizontal: 16,
   },
   popoverContainer: {
-    width: "88%",
-    maxWidth: 320,
-    backgroundColor: "#18181b",
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#141418",
     borderColor: "#27272a",
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
-    shadowRadius: 16,
+    shadowRadius: 18,
     elevation: 20,
     overflow: "hidden",
-    maxHeight: 360,
+    maxHeight: 460,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#222228",
-    backgroundColor: "#141418",
+    borderBottomColor: "#202026",
+    backgroundColor: "#18181d",
   },
   searchIcon: {
     marginRight: 8,
@@ -188,56 +341,146 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
   },
   listContainer: {
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   section: {
-    paddingVertical: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  sectionLabel: {
+    color: "#71717a",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    textTransform: "uppercase",
   },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginVertical: 1,
   },
   itemRowActive: {
-    backgroundColor: "#222228",
+    backgroundColor: "#202028",
   },
   itemLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: 8,
   },
   itemIcon: {
     marginRight: 10,
   },
   itemText: {
     color: "#d4d4d8",
-    fontSize: 13,
-    fontWeight: "400",
+    fontSize: 12.5,
+    fontWeight: "500",
   },
   itemTextActive: {
     color: "#fafafa",
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  itemSubText: {
+    color: "#71717a",
+    fontSize: 10.5,
+    marginTop: 1,
   },
   separator: {
     height: 1,
     backgroundColor: "#222228",
     marginVertical: 4,
-    marginHorizontal: 8,
+    marginHorizontal: 10,
   },
-  actionRow: {
+  presetRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 6,
-    marginHorizontal: 4,
   },
-  actionText: {
+  presetName: {
     color: "#a1a1aa",
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  presetPath: {
+    color: "#52525b",
+    fontSize: 10,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  customPathSection: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  addFolderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#1a1a20",
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#262630",
+  },
+  addFolderBtnText: {
+    color: "#38bdf8",
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  customPathForm: {
+    backgroundColor: "#18181d",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#262630",
+    gap: 8,
+  },
+  customPathTitle: {
+    color: "#fafafa",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  customInput: {
+    backgroundColor: "#111114",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    color: "#fafafa",
+    fontSize: 11.5,
+  },
+  customPathBtnRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 4,
+  },
+  btnCancel: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  btnCancelText: {
+    color: "#71717a",
+    fontSize: 11,
+  },
+  btnSave: {
+    backgroundColor: "#38bdf8",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  btnSaveText: {
+    color: "#09090b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
+

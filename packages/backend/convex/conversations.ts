@@ -40,6 +40,10 @@ export const createConversation = mutation({
   args: {
     userId: v.optional(v.union(v.id("users"), v.string())),
     title: v.string(),
+    workspaceType: v.optional(
+      v.union(v.literal("standalone"), v.literal("project_folder"))
+    ),
+    workingDirectory: v.optional(v.string()),
     targetRunnerDeviceId: v.optional(v.id("devices")),
   },
   handler: async (ctx, args) => {
@@ -50,9 +54,30 @@ export const createConversation = mutation({
       userId,
       title: args.title,
       isPinned: false,
+      workspaceType: args.workspaceType || "standalone",
+      workingDirectory: args.workingDirectory,
+      totalTokens: 0,
+      totalSpendUsd: 0,
       targetRunnerDeviceId: args.targetRunnerDeviceId,
       createdAt: now,
       updatedAt: now,
+    });
+  },
+});
+
+export const updateConversationWorkspace = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    workspaceType: v.union(v.literal("standalone"), v.literal("project_folder")),
+    workingDirectory: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+
+    await ctx.db.patch(args.conversationId, {
+      workspaceType: args.workspaceType,
+      workingDirectory: args.workingDirectory,
+      updatedAt: Date.now(),
     });
   },
 });
@@ -72,6 +97,27 @@ export const updateConversationTitle = mutation({
   },
 });
 
+export const updateConversationStats = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    addedTokens: v.number(),
+    addedCostUsd: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv) return;
+
+    const currentTokens = conv.totalTokens || 0;
+    const currentSpend = conv.totalSpendUsd || 0;
+
+    await ctx.db.patch(args.conversationId, {
+      totalTokens: currentTokens + args.addedTokens,
+      totalSpendUsd: currentSpend + (args.addedCostUsd || 0),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const togglePinConversation = mutation({
   args: {
     conversationId: v.id("conversations"),
@@ -86,3 +132,4 @@ export const togglePinConversation = mutation({
     });
   },
 });
+
