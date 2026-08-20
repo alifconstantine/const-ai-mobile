@@ -19,13 +19,18 @@ Dokumen ini adalah rencana implementasi komprehensif untuk memperbaiki seluruh p
    - Menyediakan penanganan error setup Termux yang ramah pengguna (jika Termux belum disetup, AI akan menjelaskan secara spesifik dan mengarahkan ke panduan setup di Settings/Web).
 3. **[x] ✅ SELESAI — Perbaikan Autentikasi Clerk & SSO Callback:** Memperbaiki pembuatan redirect URI (`AuthSession.makeRedirectUri`), browser warm-up, `maybeCompleteAuthSession`, caching token sesi (SecureStore + Memory), dan sinkronisasi realtime ke Convex.
 4. **[x] ✅ SELESAI — Konektivitas Backend Convex:** Migrasi penuh ke **Convex Cloud Development URL** (`https://polished-parrot-102.convex.cloud`) untuk menghilangkan kendala `127.0.0.1` pada perangkat mobile fisik.
-5. **[ ] PENDING — Redesain UI Settings & Manajemen Model BYOK (Bring Your Own Key):**
-   - Merapikan UI Settings menjadi clean, modern, dan modular.
+5. **[x] ✅ SELESAI — Redesain UI Settings & Manajemen Model BYOK (Bring Your Own Key):**
+   - Merapikan UI Settings menjadi clean, modern, dan modular (Tab Profile, AI Models & BYOK, Modes, Termux/OS Setup).
    - Menyediakan konfigurasi API Key & Custom Endpoint langsung di dalam aplikasi mobile (Gemini, Claude, OpenAI, OpenRouter, Ollama/Custom).
-   - Menghubungkan tombol "Manage models" langsung ke modal internal (bukan `localhost:3000`).
-   - **Menghapus Fallback Model Bawaan** (Murni sistem BYOK — model hanya muncul jika user telah mengonfigurasi API Key/Provider).
-   - Sinkronisasi 100% dua arah antara Mobile dan Web Dashboard via Convex.
-6. **[ ] PENDING — Penanganan Error Chat & Anti-Freeze:** Mencegah aplikasi macet/freeze saat fallback percakapan lokal atau koneksi bermasalah.
+   - Menghubungkan tombol "Manage models" langsung ke modal internal (`openSettingsTab("models")`).
+   - **Murni Sistem BYOK** (Zero default fallback models — model hanya muncul jika user telah mengonfigurasi API Key/Provider).
+   - Fitur "Test Key & Latency" instan via `testModelEndpoint`.
+   - Sinkronisasi 100% dua arah antara Mobile dan Web Dashboard via Convex (`updateUserConfig`).
+6. **[x] ✅ SELESAI — Penanganan Error Chat & Anti-Freeze:**
+   - Mencegah aplikasi macet/freeze saat fallback percakapan lokal atau koneksi bermasalah.
+   - Membungkus seluruh alur penalaran `sendMessage` dan `submitToolResult` di Convex action ke dalam safe `try/catch`.
+   - Menghasilkan bubble pesan asisten yang informatif jika terjadi missing API Key, network timeout, atau rate limit.
+   - Menambahkan Error Alert Banner & tombol "Coba Lagi" (Retry) di UI Mobile Chat saat pengiriman pesan gagal.
 7. **[ ] PENDING — Workspace & Berkas Proyek Dinamis:** Mengimplementasikan 2 mode (Tanpa Folder / Dalam Folder) dengan referensi arsitektur dari `D:\Code\Clone\const-harness\packages\workspace`.
 8. **[ ] PENDING — Metrik Token, TTFT, & Latency Presisi:** Menghitung konsumsi token riil, Time to First Token (TTFT), dan latensi berdasarkan telemetri Convex dengan referensi dari `D:\Code\Clone\const-harness\packages\llm`.
 

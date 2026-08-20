@@ -154,6 +154,21 @@ interface NavigationContextType {
     provider?: string;
     customBaseUrl?: string;
     customApiKeys?: { gemini?: string; anthropic?: string; openAi?: string; openRouter?: string };
+    customProviders?: Array<{
+      id: string;
+      name: string;
+      baseUrl: string;
+      apiKey?: string;
+      apiFormat: string;
+      isActive: boolean;
+      models: Array<{
+        id: string;
+        name: string;
+        contextLength?: number;
+        contextWindow?: number;
+        supportsTools?: boolean;
+      }>;
+    }>;
     operatingMode?: OperatingMode;
   }) => Promise<boolean>;
 
@@ -520,6 +535,21 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
     provider?: string;
     customBaseUrl?: string;
     customApiKeys?: { gemini?: string; anthropic?: string; openAi?: string; openRouter?: string };
+    customProviders?: Array<{
+      id: string;
+      name: string;
+      baseUrl: string;
+      apiKey?: string;
+      apiFormat: string;
+      isActive: boolean;
+      models: Array<{
+        id: string;
+        name: string;
+        contextLength?: number;
+        contextWindow?: number;
+        supportsTools?: boolean;
+      }>;
+    }>;
     operatingMode?: OperatingMode;
   }): Promise<boolean> => {
     if (!currentUserId) return false;
@@ -535,6 +565,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         provider: data.provider,
         customBaseUrl: data.customBaseUrl,
         customApiKeys: data.customApiKeys,
+        customProviders: data.customProviders,
         operatingMode: data.operatingMode,
       });
 
@@ -547,6 +578,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
                 provider: res.provider || prev.provider,
                 customBaseUrl: res.customBaseUrl ?? prev.customBaseUrl,
                 customApiKeys: res.customApiKeys || prev.customApiKeys,
+                customProviders: res.customProviders || prev.customProviders,
                 operatingMode: (res.operatingMode as OperatingMode) || prev.operatingMode,
               }
             : null

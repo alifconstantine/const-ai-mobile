@@ -60,163 +60,173 @@ export const sendMessage = action({
       content: args.userMessage,
     });
 
-    // 2. Fetch User Config & Message History
-    const userConfig = await ctx.runQuery(api.users.getUserConfig, {
-      userId: args.userId,
-    });
-
-    const history = await ctx.runQuery(api.messages.listMessages, {
-      conversationId: args.conversationId,
-    });
-
-    // Read user config or use sensible defaults
-    const operatingMode: OperatingMode =
-      (args.operatingModeOverride as OperatingMode) ||
-      userConfig?.operatingMode ||
-      "normal_mode";
-
-    // Clean active model string (strip UI prefixes/suffixes if present)
-    const rawModel = args.modelOverride || userConfig?.activeModel || "Const";
-    const activeModel = rawModel.split(" (")[0].trim();
-
-    // Check if the requested model belongs to any custom provider in userConfig
-    const customProvidersList = userConfig?.customProviders || [];
-    const matchedCustomProvider = customProvidersList.find((p: any) =>
-      p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
-    ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
-
-    // Determine LLM provider type
-    let provider: LLMProviderType = "custom_openai";
-    let matchedBaseUrl = "";
-    let matchedApiKey = "";
-
-    if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
-      provider = "custom_openai";
-      matchedBaseUrl = matchedCustomProvider.baseUrl || "";
-      matchedApiKey = matchedCustomProvider.apiKey || "";
-    } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
-      provider = "gemini";
-    } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
-      provider = "anthropic";
-    } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
-      provider = "openai";
-    } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
-      provider = "openrouter";
-    } else if (userConfig?.provider) {
-      provider = userConfig.provider as LLMProviderType;
-    } else {
-      provider = "custom_openai";
-    }
-
-    const customBaseUrl =
-      args.customBaseUrlOverride ||
-      matchedBaseUrl ||
-      userConfig?.customBaseUrl ||
-      "http://localhost:20128/v1";
-
-    // Resolve API key strictly from database user config / custom provider (No server process.env fallback)
-    const apiKey =
-      args.customApiKeyOverride ||
-      matchedApiKey ||
-      (provider === "gemini"
-        ? userConfig?.customApiKeys?.gemini
-        : provider === "anthropic"
-        ? userConfig?.customApiKeys?.anthropic
-        : provider === "openrouter"
-        ? userConfig?.customApiKeys?.openRouter
-        : provider === "openai"
-        ? userConfig?.customApiKeys?.openAi
-        : "") ||
-      "";
-
-    if (provider !== "custom_openai" && !apiKey) {
-      const providerLabel =
-        provider === "gemini"
-          ? "Google Gemini"
-          : provider === "anthropic"
-          ? "Anthropic Claude"
-          : provider === "openai"
-          ? "OpenAI"
-          : "OpenRouter";
-      throw new Error(
-        `API Key untuk ${providerLabel} belum dikonfigurasi di akun Anda. Silakan masukkan API Key Anda di menu Settings.`
-      );
-    }
-
-    // 3. Build System Prompt & Canonical Messages Array
-    const systemPrompt = buildSystemPrompt({
-      operatingMode,
-      activeModel,
-      platform: "android",
-    });
-
-    const messages: LLMMessage[] = [
-      { role: "system", content: systemPrompt },
-      ...history.slice(-15).map(
-        (m: {
-          role: string;
-          content: string;
-          toolCalls?: Array<{ id: string; toolName: string; args: any }>;
-        }) => ({
-          role: m.role as "system" | "user" | "assistant" | "tool",
-          content: m.content,
-          tool_calls: m.toolCalls?.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.toolName,
-              arguments: JSON.stringify(tc.args),
-            },
-          })),
-        })
-      ),
-    ];
-
-    // 4. Dispatch to LLM Provider via Hermes Transport Layer
-    let llmResponse;
-    const toolsForLLM = operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS;
-
     try {
-      llmResponse = await executeLLMCompletion(messages, {
-        provider,
-        model: activeModel,
-        apiKey,
-        customBaseUrl,
-        tools: toolsForLLM,
+      // 2. Fetch User Config & Message History
+      const userConfig = await ctx.runQuery(api.users.getUserConfig, {
+        userId: args.userId,
       });
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      // Save error message as assistant response
-      await ctx.runMutation(api.messages.insertMessage, {
-        conversationId: args.conversationId,
-        role: "assistant",
-        content: `⚠️ Maaf, terjadi kendala saat memanggil model AI (${activeModel}):\n${errorMsg}`,
-      });
-      return { success: false, error: errorMsg };
-    }
 
-    // 5. Handle LLM Tool Calls vs Plain Text Response
-    if (!llmResponse.toolCalls || llmResponse.toolCalls.length === 0) {
-      // Plain text response without tool calls
-      const assistantMessageId: string = await ctx.runMutation(
-        api.messages.insertMessage,
-        {
+      const history = await ctx.runQuery(api.messages.listMessages, {
+        conversationId: args.conversationId,
+      });
+
+      // Read user config or use sensible defaults
+      const operatingMode: OperatingMode =
+        (args.operatingModeOverride as OperatingMode) ||
+        userConfig?.operatingMode ||
+        "normal_mode";
+
+      // Clean active model string (strip UI prefixes/suffixes if present)
+      const rawModel = args.modelOverride || userConfig?.activeModel || "Const";
+      const activeModel = rawModel.split(" (")[0].trim();
+
+      // Check if the requested model belongs to any custom provider in userConfig
+      const customProvidersList = userConfig?.customProviders || [];
+      const matchedCustomProvider = customProvidersList.find((p: any) =>
+        p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
+      ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
+
+      // Determine LLM provider type
+      let provider: LLMProviderType = "custom_openai";
+      let matchedBaseUrl = "";
+      let matchedApiKey = "";
+
+      if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
+        provider = "custom_openai";
+        matchedBaseUrl = matchedCustomProvider.baseUrl || "";
+        matchedApiKey = matchedCustomProvider.apiKey || "";
+      } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
+        provider = "gemini";
+      } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
+        provider = "anthropic";
+      } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
+        provider = "openai";
+      } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
+        provider = "openrouter";
+      } else if (userConfig?.provider) {
+        provider = userConfig.provider as LLMProviderType;
+      } else {
+        provider = "custom_openai";
+      }
+
+      const customBaseUrl =
+        args.customBaseUrlOverride ||
+        matchedBaseUrl ||
+        userConfig?.customBaseUrl ||
+        "http://localhost:20128/v1";
+
+      // Resolve API key strictly from database user config / custom provider (No server process.env fallback)
+      const apiKey =
+        args.customApiKeyOverride ||
+        matchedApiKey ||
+        (provider === "gemini"
+          ? userConfig?.customApiKeys?.gemini
+          : provider === "anthropic"
+          ? userConfig?.customApiKeys?.anthropic
+          : provider === "openrouter"
+          ? userConfig?.customApiKeys?.openRouter
+          : provider === "openai"
+          ? userConfig?.customApiKeys?.openAi
+          : "") ||
+        "";
+
+      if (provider !== "custom_openai" && !apiKey) {
+        const providerLabel =
+          provider === "gemini"
+            ? "Google Gemini"
+            : provider === "anthropic"
+            ? "Anthropic Claude"
+            : provider === "openai"
+            ? "OpenAI"
+            : "OpenRouter";
+        const missingKeyMsg = `⚠️ API Key untuk **${providerLabel}** (${activeModel}) belum dikonfigurasi.\n\n💡 Silakan buka menu **Settings > AI Models & BYOK** di pojok kanan atas atau klik tombol model untuk memasukkan API Key Anda.`;
+        
+        await ctx.runMutation(api.messages.insertMessage, {
           conversationId: args.conversationId,
           role: "assistant",
-          content: llmResponse.content,
-          modelUsed: llmResponse.modelUsed,
-          promptTokens: llmResponse.usage?.promptTokens,
-          completionTokens: llmResponse.usage?.completionTokens,
-        }
-      );
+          content: missingKeyMsg,
+        });
 
-      return {
-        success: true,
-        messageId: assistantMessageId,
-        content: llmResponse.content,
-        toolCalls: [],
-      };
-    }
+        return {
+          success: false,
+          error: `API Key untuk ${providerLabel} belum dikonfigurasi.`,
+        };
+      }
+
+      // 3. Build System Prompt & Canonical Messages Array
+      const systemPrompt = buildSystemPrompt({
+        operatingMode,
+        activeModel,
+        platform: "android",
+      });
+
+      const messages: LLMMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...history.slice(-15).map(
+          (m: {
+            role: string;
+            content: string;
+            toolCalls?: Array<{ id: string; toolName: string; args: any }>;
+          }) => ({
+            role: m.role as "system" | "user" | "assistant" | "tool",
+            content: m.content,
+            tool_calls: m.toolCalls?.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.toolName,
+                arguments: JSON.stringify(tc.args),
+              },
+            })),
+          })
+        ),
+      ];
+
+      // 4. Dispatch to LLM Provider via Hermes Transport Layer
+      let llmResponse;
+      const toolsForLLM = operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS;
+
+      try {
+        llmResponse = await executeLLMCompletion(messages, {
+          provider,
+          model: activeModel,
+          apiKey,
+          customBaseUrl,
+          tools: toolsForLLM,
+        });
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        // Save error message as assistant response
+        await ctx.runMutation(api.messages.insertMessage, {
+          conversationId: args.conversationId,
+          role: "assistant",
+          content: `⚠️ Maaf, terjadi kendala saat memanggil model AI (${activeModel}):\n${errorMsg}\n\n💡 Pastikan API Key dan koneksi internet Anda aktif, atau atur provider lain di menu Settings.`,
+        });
+        return { success: false, error: errorMsg };
+      }
+
+      // 5. Handle LLM Tool Calls vs Plain Text Response
+      if (!llmResponse.toolCalls || llmResponse.toolCalls.length === 0) {
+        // Plain text response without tool calls
+        const assistantMessageId: string = await ctx.runMutation(
+          api.messages.insertMessage,
+          {
+            conversationId: args.conversationId,
+            role: "assistant",
+            content: llmResponse.content,
+            modelUsed: llmResponse.modelUsed,
+            promptTokens: llmResponse.usage?.promptTokens,
+            completionTokens: llmResponse.usage?.completionTokens,
+          }
+        );
+
+        return {
+          success: true,
+          messageId: assistantMessageId,
+          content: llmResponse.content,
+          toolCalls: [],
+        };
+      }
 
     // Process each Tool Call through Policy Engine (HITL Safety Evaluation)
     const evaluatedToolCalls: EvaluatedToolCall[] = [];
@@ -305,12 +315,26 @@ export const sendMessage = action({
       });
     }
 
-    return {
-      success: true,
-      messageId: assistantMessageId,
-      content: llmResponse.content,
-      toolCalls: evaluatedToolCalls,
-    };
+      return {
+        success: true,
+        messageId: assistantMessageId,
+        content: llmResponse.content,
+        toolCalls: evaluatedToolCalls,
+      };
+    } catch (globalErr: any) {
+      const errorMsg = globalErr?.message || String(globalErr);
+      console.error("Critical error in sendMessage action:", globalErr);
+      try {
+        await ctx.runMutation(api.messages.insertMessage, {
+          conversationId: args.conversationId,
+          role: "assistant",
+          content: `⚠️ Maaf, terjadi kendala saat memproses pesan Anda:\n${errorMsg}\n\n💡 Silakan periksa pengaturan API Key / Endpoint Anda di menu Settings.`,
+        });
+      } catch (innerErr) {
+        console.error("Failed to insert error assistant message:", innerErr);
+      }
+      return { success: false, error: errorMsg };
+    }
   },
 });
 
@@ -327,253 +351,279 @@ export const submitToolResult = action({
     status: v.union(v.literal("success"), v.literal("failed")),
   },
   handler: async (ctx, args): Promise<SubmitToolResultResponse> => {
-    // 1. Update the tool call record in the message
-    await ctx.runMutation(api.messages.updateToolCallResult, {
-      messageId: args.assistantMessageId,
-      toolCallId: args.toolCallId,
-      result: args.result,
-      status: args.status,
-    });
+    try {
+      // 1. Update the tool call record in the message
+      await ctx.runMutation(api.messages.updateToolCallResult, {
+        messageId: args.assistantMessageId,
+        toolCallId: args.toolCallId,
+        result: args.result,
+        status: args.status,
+      });
 
-    // 2. Insert tool result as a role: "tool" message in conversation history (with context compaction)
-    const rawResultStr =
-      typeof args.result === "string"
-        ? args.result
-        : JSON.stringify(args.result, null, 2);
-    const compactedResult =
-      rawResultStr.length > 4000
-        ? rawResultStr.slice(0, 4000) + "\n...[Output truncated to 4000 chars]"
-        : rawResultStr;
+      // 2. Insert tool result as a role: "tool" message in conversation history (with context compaction)
+      const rawResultStr =
+        typeof args.result === "string"
+          ? args.result
+          : JSON.stringify(args.result, null, 2);
+      const compactedResult =
+        rawResultStr.length > 4000
+          ? rawResultStr.slice(0, 4000) + "\n...[Output truncated to 4000 chars]"
+          : rawResultStr;
 
-    await ctx.runMutation(api.messages.insertMessage, {
-      conversationId: args.conversationId,
-      role: "tool",
-      content: compactedResult,
-    });
+      await ctx.runMutation(api.messages.insertMessage, {
+        conversationId: args.conversationId,
+        role: "tool",
+        content: compactedResult,
+      });
 
-    // 3. Re-fetch message history to resume reasoning loop
-    const history = await ctx.runQuery(api.messages.listMessages, {
-      conversationId: args.conversationId,
-    });
+      // 3. Re-fetch message history to resume reasoning loop
+      const history = await ctx.runQuery(api.messages.listMessages, {
+        conversationId: args.conversationId,
+      });
 
-    // Fetch user config to resolve active model and provider
-    const userConfig = await ctx.runQuery(api.users.getUserConfig, {
-      userId: args.userId,
-    });
+      // Fetch user config to resolve active model and provider
+      const userConfig = await ctx.runQuery(api.users.getUserConfig, {
+        userId: args.userId,
+      });
 
-    const operatingMode: OperatingMode =
-      userConfig?.operatingMode || "normal_mode";
+      const operatingMode: OperatingMode =
+        userConfig?.operatingMode || "normal_mode";
 
-    // Find the last assistant modelUsed if available
-    const lastAssistantMsg = [...history].reverse().find((m: any) => m.role === "assistant" && m.modelUsed);
-    const rawModel = lastAssistantMsg?.modelUsed || userConfig?.activeModel || "Const";
-    const activeModel = rawModel.split(" (")[0].trim();
+      // Find the last assistant modelUsed if available
+      const lastAssistantMsg = [...history].reverse().find((m: any) => m.role === "assistant" && m.modelUsed);
+      const rawModel = lastAssistantMsg?.modelUsed || userConfig?.activeModel || "Const";
+      const activeModel = rawModel.split(" (")[0].trim();
 
-    // Check if the requested model belongs to any custom provider
-    const customProvidersList = userConfig?.customProviders || [];
-    const matchedCustomProvider = customProvidersList.find((p: any) =>
-      p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
-    ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
+      // Check if the requested model belongs to any custom provider
+      const customProvidersList = userConfig?.customProviders || [];
+      const matchedCustomProvider = customProvidersList.find((p: any) =>
+        p.models?.some((m: any) => m.id === activeModel || m.name === activeModel || m.id === rawModel)
+      ) || customProvidersList.find((p: any) => p.isActive) || customProvidersList[0];
 
-    let provider: LLMProviderType = "custom_openai";
-    let matchedBaseUrl = "";
-    let matchedApiKey = "";
+      let provider: LLMProviderType = "custom_openai";
+      let matchedBaseUrl = "";
+      let matchedApiKey = "";
 
-    if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
-      provider = "custom_openai";
-      matchedBaseUrl = matchedCustomProvider.baseUrl || "";
-      matchedApiKey = matchedCustomProvider.apiKey || "";
-    } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
-      provider = "gemini";
-    } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
-      provider = "anthropic";
-    } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
-      provider = "openai";
-    } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
-      provider = "openrouter";
-    } else if (userConfig?.provider) {
-      provider = userConfig.provider as LLMProviderType;
-    } else {
-      provider = "custom_openai";
-    }
-
-    const customBaseUrl =
-      matchedBaseUrl ||
-      userConfig?.customBaseUrl ||
-      "http://localhost:20128/v1";
-
-    const apiKey =
-      matchedApiKey ||
-      (provider === "gemini"
-        ? userConfig?.customApiKeys?.gemini
-        : provider === "anthropic"
-        ? userConfig?.customApiKeys?.anthropic
-        : provider === "openrouter"
-        ? userConfig?.customApiKeys?.openRouter
-        : provider === "openai"
-        ? userConfig?.customApiKeys?.openAi
-        : "") ||
-      "";
-
-    if (provider !== "custom_openai" && !apiKey) {
-      const providerLabel =
-        provider === "gemini"
-          ? "Google Gemini"
-          : provider === "anthropic"
-          ? "Anthropic Claude"
-          : provider === "openai"
-          ? "OpenAI"
-          : "OpenRouter";
-      throw new Error(
-        `API Key untuk ${providerLabel} belum dikonfigurasi di akun Anda. Silakan masukkan API Key Anda di menu Settings.`
-      );
-    }
-
-    const systemPrompt = buildSystemPrompt({
-      operatingMode,
-      activeModel,
-      platform: "android",
-    });
-
-    const messages: LLMMessage[] = [
-      { role: "system", content: systemPrompt },
-      ...history.slice(-15).map((m: { role: string; content: string; toolCalls?: any[] }) => {
-        const msg: LLMMessage = {
-          role: m.role as "system" | "user" | "assistant" | "tool",
-          content: m.content,
-        };
-        if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
-          msg.tool_calls = m.toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.toolName,
-              arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args),
-            },
-          }));
-        }
-        if (m.role === "tool") {
-          msg.tool_call_id = args.toolCallId;
-        }
-        return msg;
-      }),
-    ];
-
-    // 4. Continue generation to summarize tool result for user
-    const continuation = await executeLLMCompletion(messages, {
-      provider,
-      model: activeModel,
-      customBaseUrl,
-      apiKey,
-      tools: operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS,
-    });
-
-    // If continuation requested further tool calls, evaluate and save
-    if (continuation.toolCalls && continuation.toolCalls.length > 0) {
-      const evaluatedToolCalls: EvaluatedToolCall[] = [];
-      const pendingInterceptions: Array<{
-        tcId: string;
-        toolName: ConstToolName;
-        toolArgs: Record<string, unknown>;
-        suggestedActionType?: "shell_command" | "device_control" | "file_delete";
-        userFacingSummary: string;
-        riskLevel: string;
-      }> = [];
-
-      for (const tc of continuation.toolCalls) {
-        const toolName = tc.name as ConstToolName;
-        const toolArgs = tc.arguments;
-        const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
-
-        if (policy.decision === "deny") {
-          evaluatedToolCalls.push({
-            id: tc.id,
-            toolName,
-            args: toolArgs,
-            policyDecision: "deny" as const,
-            status: "failed" as const,
-            error: policy.reason,
-          });
-        } else if (policy.decision === "ask") {
-          pendingInterceptions.push({
-            tcId: tc.id,
-            toolName,
-            toolArgs,
-            suggestedActionType: policy.suggestedActionType,
-            userFacingSummary: policy.userFacingSummary,
-            riskLevel: policy.riskLevel,
-          });
-          evaluatedToolCalls.push({
-            id: tc.id,
-            toolName,
-            args: toolArgs,
-            policyDecision: "ask" as const,
-            status: "waiting_hitl" as const,
-          });
-        } else {
-          evaluatedToolCalls.push({
-            id: tc.id,
-            toolName,
-            args: toolArgs,
-            policyDecision: "allow" as const,
-            status: "running" as const,
-          });
-        }
+      if (matchedCustomProvider && (matchedCustomProvider.models?.some((m: any) => m.id === activeModel || m.name === activeModel) || activeModel === "Const")) {
+        provider = "custom_openai";
+        matchedBaseUrl = matchedCustomProvider.baseUrl || "";
+        matchedApiKey = matchedCustomProvider.apiKey || "";
+      } else if (activeModel.toLowerCase().startsWith("gemini") || activeModel.toLowerCase().startsWith("google/")) {
+        provider = "gemini";
+      } else if (activeModel.toLowerCase().startsWith("claude") || activeModel.toLowerCase().startsWith("anthropic/")) {
+        provider = "anthropic";
+      } else if (activeModel.toLowerCase().startsWith("gpt-") || activeModel.toLowerCase().startsWith("o3-") || activeModel.toLowerCase().startsWith("o1-")) {
+        provider = "openai";
+      } else if (activeModel.toLowerCase().startsWith("deepseek") || activeModel.toLowerCase().startsWith("openrouter/")) {
+        provider = "openrouter";
+      } else if (userConfig?.provider) {
+        provider = userConfig.provider as LLMProviderType;
+      } else {
+        provider = "custom_openai";
       }
 
+      const customBaseUrl =
+        matchedBaseUrl ||
+        userConfig?.customBaseUrl ||
+        "http://localhost:20128/v1";
+
+      const apiKey =
+        matchedApiKey ||
+        (provider === "gemini"
+          ? userConfig?.customApiKeys?.gemini
+          : provider === "anthropic"
+          ? userConfig?.customApiKeys?.anthropic
+          : provider === "openrouter"
+          ? userConfig?.customApiKeys?.openRouter
+          : provider === "openai"
+          ? userConfig?.customApiKeys?.openAi
+          : "") ||
+        "";
+
+      if (provider !== "custom_openai" && !apiKey) {
+        const providerLabel =
+          provider === "gemini"
+            ? "Google Gemini"
+            : provider === "anthropic"
+            ? "Anthropic Claude"
+            : provider === "openai"
+            ? "OpenAI"
+            : "OpenRouter";
+        const missingKeyMsg = `⚠️ Eksekusi tool selesai, namun model ${activeModel} membutuhkan API Key untuk ${providerLabel}.\n\n💡 Silakan konfigurasikan API Key di menu Settings.`;
+        
+        await ctx.runMutation(api.messages.insertMessage, {
+          conversationId: args.conversationId,
+          role: "assistant",
+          content: missingKeyMsg,
+        });
+
+        return {
+          success: false,
+          error: `API Key untuk ${providerLabel} belum dikonfigurasi.`,
+        };
+      }
+
+      const systemPrompt = buildSystemPrompt({
+        operatingMode,
+        activeModel,
+        platform: "android",
+      });
+
+      const messages: LLMMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...history.slice(-15).map((m: { role: string; content: string; toolCalls?: any[] }) => {
+          const msg: LLMMessage = {
+            role: m.role as "system" | "user" | "assistant" | "tool",
+            content: m.content,
+          };
+          if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+            msg.tool_calls = m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.toolName,
+                arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args),
+              },
+            }));
+          }
+          if (m.role === "tool") {
+            msg.tool_call_id = args.toolCallId;
+          }
+          return msg;
+        }),
+      ];
+
+      // 4. Continue generation to summarize tool result for user
+      let continuation;
+      try {
+        continuation = await executeLLMCompletion(messages, {
+          provider,
+          model: activeModel,
+          customBaseUrl,
+          apiKey,
+          tools: operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS,
+        });
+      } catch (llmErr: any) {
+        const errorMsg = llmErr?.message || String(llmErr);
+        await ctx.runMutation(api.messages.insertMessage, {
+          conversationId: args.conversationId,
+          role: "assistant",
+          content: `⚠️ Tool berhasil dijalankan, namun terjadi kendala saat melanjutkan penalaran (${activeModel}):\n${errorMsg}`,
+        });
+        return { success: false, error: errorMsg };
+      }
+
+      // If continuation requested further tool calls, evaluate and save
+      if (continuation.toolCalls && continuation.toolCalls.length > 0) {
+        const evaluatedToolCalls: EvaluatedToolCall[] = [];
+        const pendingInterceptions: Array<{
+          tcId: string;
+          toolName: ConstToolName;
+          toolArgs: Record<string, unknown>;
+          suggestedActionType?: "shell_command" | "device_control" | "file_delete";
+          userFacingSummary: string;
+          riskLevel: string;
+        }> = [];
+
+        for (const tc of continuation.toolCalls) {
+          const toolName = tc.name as ConstToolName;
+          const toolArgs = tc.arguments;
+          const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
+
+          if (policy.decision === "deny") {
+            evaluatedToolCalls.push({
+              id: tc.id,
+              toolName,
+              args: toolArgs,
+              policyDecision: "deny" as const,
+              status: "failed" as const,
+              error: policy.reason,
+            });
+          } else if (policy.decision === "ask") {
+            pendingInterceptions.push({
+              tcId: tc.id,
+              toolName,
+              toolArgs,
+              suggestedActionType: policy.suggestedActionType,
+              userFacingSummary: policy.userFacingSummary,
+              riskLevel: policy.riskLevel,
+            });
+            evaluatedToolCalls.push({
+              id: tc.id,
+              toolName,
+              args: toolArgs,
+              policyDecision: "ask" as const,
+              status: "waiting_hitl" as const,
+            });
+          } else {
+            evaluatedToolCalls.push({
+              id: tc.id,
+              toolName,
+              args: toolArgs,
+              policyDecision: "allow" as const,
+              status: "running" as const,
+            });
+          }
+        }
+
+        const nextMessageId: string = await ctx.runMutation(
+          api.messages.insertMessage,
+          {
+            conversationId: args.conversationId,
+            role: "assistant",
+            content:
+              continuation.content || "Menjalankan instruksi lanjutan perangkat...",
+            toolCalls: evaluatedToolCalls,
+            modelUsed: continuation.modelUsed,
+            promptTokens: continuation.usage?.promptTokens,
+            completionTokens: continuation.usage?.completionTokens,
+          }
+        );
+
+        for (const pi of pendingInterceptions) {
+          await ctx.runMutation(api.pendingActions.createPendingAction, {
+            userId: args.userId,
+            conversationId: args.conversationId,
+            assistantMessageId: nextMessageId as any,
+            toolCallId: pi.tcId,
+            toolName: pi.toolName,
+            toolArgs: pi.toolArgs,
+            actionType: pi.suggestedActionType,
+            command: pi.userFacingSummary,
+            riskLevel: pi.riskLevel,
+          });
+        }
+
+        return {
+          success: true,
+          messageId: nextMessageId,
+          content: continuation.content,
+        };
+      }
+
+      // 5. Save the final assistant follow-up response
       const nextMessageId: string = await ctx.runMutation(
         api.messages.insertMessage,
         {
           conversationId: args.conversationId,
           role: "assistant",
-          content:
-            continuation.content || "Menjalankan instruksi lanjutan perangkat...",
-          toolCalls: evaluatedToolCalls,
+          content: continuation.content,
           modelUsed: continuation.modelUsed,
           promptTokens: continuation.usage?.promptTokens,
           completionTokens: continuation.usage?.completionTokens,
         }
       );
 
-      for (const pi of pendingInterceptions) {
-        await ctx.runMutation(api.pendingActions.createPendingAction, {
-          userId: args.userId,
-          conversationId: args.conversationId,
-          assistantMessageId: nextMessageId as any,
-          toolCallId: pi.tcId,
-          toolName: pi.toolName,
-          toolArgs: pi.toolArgs,
-          actionType: pi.suggestedActionType,
-          command: pi.userFacingSummary,
-          riskLevel: pi.riskLevel,
-        });
-      }
-
       return {
         success: true,
         messageId: nextMessageId,
         content: continuation.content,
       };
+    } catch (globalErr: any) {
+      const errorMsg = globalErr?.message || String(globalErr);
+      console.error("Critical error in submitToolResult action:", globalErr);
+      return { success: false, error: errorMsg };
     }
-
-    // 5. Save the final assistant follow-up response
-    const nextMessageId: string = await ctx.runMutation(
-      api.messages.insertMessage,
-      {
-        conversationId: args.conversationId,
-        role: "assistant",
-        content: continuation.content,
-        modelUsed: continuation.modelUsed,
-        promptTokens: continuation.usage?.promptTokens,
-        completionTokens: continuation.usage?.completionTokens,
-      }
-    );
-
-    return {
-      success: true,
-      messageId: nextMessageId,
-      content: continuation.content,
-    };
   },
 });
 

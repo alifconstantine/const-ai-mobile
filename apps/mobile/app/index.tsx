@@ -21,6 +21,9 @@ import {
   ShieldAlert,
   Bot,
   Sparkles,
+  AlertCircle,
+  RotateCw,
+  X,
 } from "lucide-react-native";
 import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@const-ai/backend";
@@ -137,7 +140,11 @@ export default function HomeScreen() {
     }, 100);
   }, [messages?.length, isSending, optimisticUserMessage]);
 
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [lastFailedText, setLastFailedText] = useState<string | null>(null);
+
   const handlePromptChange = (text: string) => {
+    if (sendError) setSendError(null);
     setPromptInput(text);
     if (text.endsWith("@")) {
       setMentionOpen(true);
@@ -147,9 +154,10 @@ export default function HomeScreen() {
   };
 
   const handleSendMessage = async () => {
-    const text = promptInput.trim();
+    const text = promptInput.trim() || lastFailedText || "";
     if (!text || isSending) return;
 
+    setSendError(null);
     setPromptInput("");
     setIsSending(true);
     setOptimisticUserMessage({ content: text, createdAt: Date.now() });
@@ -159,9 +167,13 @@ export default function HomeScreen() {
       const snippet = text.slice(0, 30) + (text.length > 30 ? "..." : "");
 
       if (!convId || convId.startsWith("local_")) {
-        const createdId = await createNewConversation(snippet);
-        if (createdId) {
-          convId = createdId;
+        try {
+          const createdId = await createNewConversation(snippet);
+          if (createdId) {
+            convId = createdId;
+          }
+        } catch (convErr) {
+          console.warn("Failed to create conversation:", convErr);
         }
       } else if (activeTaskTitle === "New Task") {
         setActiveTaskTitle(snippet);
@@ -176,13 +188,15 @@ export default function HomeScreen() {
       }
 
       if (!convId || convId.startsWith("local_")) {
-        console.warn("No active conversation ID available for chat.");
+        setSendError("Koneksi backend belum terhubung. Silakan coba lagi.");
+        setLastFailedText(text);
+        setPromptInput(text);
         setIsSending(false);
         setOptimisticUserMessage(null);
         return;
       }
 
-      await sendMessageAction({
+      const result = await sendMessageAction({
         userId: currentUserId ? (currentUserId as any) : undefined,
         conversationId: convId as any,
         userMessage: text,
@@ -191,8 +205,19 @@ export default function HomeScreen() {
         customApiKeyOverride: customApiKey || undefined,
         customBaseUrlOverride: customBaseUrl || undefined,
       });
-    } catch (err) {
+
+      if (result && !result.success && result.error) {
+        setSendError(result.error);
+        setLastFailedText(text);
+      } else {
+        setLastFailedText(null);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
       console.error("Error sending message:", err);
+      setSendError(errMsg);
+      setLastFailedText(text);
+      setPromptInput(text);
     } finally {
       setIsSending(false);
       setOptimisticUserMessage(null);
@@ -392,6 +417,23 @@ export default function HomeScreen() {
           pendingCount={activePendingCount}
           onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
         />
+
+        {/* Error Alert Banner if sending failed */}
+        {sendError && (
+          <View style={styles.errorBannerContainer}>
+            <AlertCircle size={14} color="#f87171" style={{ marginTop: 2 }} />
+            <Text style={styles.errorBannerText} numberOfLines={2}>
+              {sendError}
+            </Text>
+            <TouchableOpacity style={styles.errorRetryBtn} onPress={handleSendMessage}>
+              <RotateCw size={11} color="#38bdf8" />
+              <Text style={styles.errorRetryBtnText}>Coba Lagi</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSendError(null)} style={{ padding: 2 }}>
+              <X size={13} color="#71717a" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.inputBoxContainer}>
           <TextInput
@@ -650,5 +692,37 @@ const styles = StyleSheet.create({
   },
   sendButtonActive: {
     backgroundColor: "#38bdf8",
+  },
+  errorBannerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: "#fca5a5",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  errorRetryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#1c1c22",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+  errorRetryBtnText: {
+    color: "#38bdf8",
+    fontSize: 10.5,
+    fontWeight: "600",
   },
 });
