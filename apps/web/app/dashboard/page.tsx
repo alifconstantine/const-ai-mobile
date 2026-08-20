@@ -128,14 +128,14 @@ export default function DashboardPage() {
   const activeModel = liveViewer?.config?.activeModel || "Const";
 
   // Operating Mode
-  const operatingMode = liveViewer?.config?.operatingMode || "ask_before_change";
+  const operatingMode = liveViewer?.config?.operatingMode || "normal_mode";
   const operatingModeLabels: Record<string, { title: string; badge: string }> = {
-    plan_mode: { title: "Plan Mode Only", badge: "Read Only" },
+    normal_mode: { title: "Normal Mode (Safe)", badge: "No Tools" },
     ask_before_change: { title: "Ask Before Change", badge: "HITL (Protected)" },
-    edit_automatically: { title: "Autonomous Execution", badge: "Semi-Auto" },
+    plan_mode: { title: "Plan Mode Only", badge: "Read Only" },
     full_access_yolo: { title: "Full Access Mode", badge: "YOLO (Unrestricted)" },
   };
-  const currentMode = operatingModeLabels[operatingMode] || operatingModeLabels.ask_before_change;
+  const currentMode = operatingModeLabels[operatingMode] || operatingModeLabels.normal_mode;
 
   // Real Stats Extract
   const totalSessions = dashboardStats?.totalSessions ?? 0;

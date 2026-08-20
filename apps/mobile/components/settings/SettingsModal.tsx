@@ -42,24 +42,24 @@ const OPERATING_MODES: {
   desc: string;
 }[] = [
   {
-    id: "plan_mode",
-    name: "1. Plan Mode",
-    desc: "Draft implementation plan & await approval before any edits",
+    id: "normal_mode",
+    name: "1. Normal Mode (Default)",
+    desc: "Obrolan asisten AI & analisis kode aman tanpa akses terminal/perangkat",
   },
   {
     id: "ask_before_change",
     name: "2. Ask Before Change",
-    desc: "Every file edit and shell command requires explicit confirmation",
+    desc: "Akses terminal Termux & tools OS aktif dengan konfirmasi per tindakan (HITL)",
   },
   {
-    id: "edit_automatically",
-    name: "3. Edit Automatically",
-    desc: "Directly edits files and runs low-risk commands automatically",
+    id: "plan_mode",
+    name: "3. Plan Mode",
+    desc: "Membuat dokumen rencana kerja terlebih dahulu, akses terminal dengan izin",
   },
   {
     id: "full_access_yolo",
     name: "4. Full Access (YOLO)",
-    desc: "Zero-prompt autonomous execution for rapid development",
+    desc: "Eksekusi terminal dan perintah sistem otomatis tanpa dialog konfirmasi",
   },
 ];
 

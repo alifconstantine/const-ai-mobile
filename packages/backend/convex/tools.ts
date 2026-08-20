@@ -317,7 +317,7 @@ export function buildSystemPrompt(options: {
 }): string {
   const {
     persona = "You are Const AI, a fast, proactive, and intelligent personal phone assistant and OS operator.",
-    operatingMode = "ask_before_change",
+    operatingMode = "normal_mode",
     platform = "android",
     memories = [],
     activeModel = "auto",
@@ -330,6 +330,24 @@ export function buildSystemPrompt(options: {
       .join("\n")}`;
   }
 
+  let modeSpecificRules = "";
+  if (operatingMode === "normal_mode") {
+    modeSpecificRules = `
+1. **NORMAL MODE ACTIVE (SAFE / DEFAULT)**: All device OS operations, Linux Termux shell scripts, and native tool executions are disabled in this mode. Do not invoke tools. Act strictly as an intelligent conversational and coding assistant (answering questions, explaining concepts, reviewing and writing code snippets directly in chat).`;
+  } else if (operatingMode === "ask_before_change") {
+    modeSpecificRules = `
+1. **ASK BEFORE CHANGE (HITL ACTIVE)**: You can propose device actions and terminal scripts, but modifying actions, system changes, or shell commands will require explicit user confirmation via HITL prompt.
+2. **Device OS Operator**: You have direct tools to query/modify contacts, scan/clean storage, inspect apps, and run Linux Termux / Shizuku commands.`;
+  } else if (operatingMode === "plan_mode") {
+    modeSpecificRules = `
+1. **PLAN MODE ACTIVE**: You must first draft a comprehensive Implementation Plan before executing any modifying device commands or terminal scripts.
+2. **Device OS Operator**: Use read-only inspection tools freely; modifying operations require plan approval.`;
+  } else if (operatingMode === "full_access_yolo") {
+    modeSpecificRules = `
+1. **FULL ACCESS (YOLO ACTIVE)**: You have unrestricted immediate execution access to device operations, Termux shell, and Shizuku tools without confirmation dialogs.
+2. **Device OS Operator**: Execute commands directly to accomplish user requests rapidly.`;
+  }
+
   return `${persona}
 
 ### Operational Context:
@@ -338,8 +356,12 @@ export function buildSystemPrompt(options: {
 - Active Model: ${activeModel}
 - Current Date/Time: ${new Date().toISOString()}
 
-### Operating Rules:
-1. **Device OS Operator**: You have direct tools to query/modify contacts, scan/clean storage, inspect apps, and toggle hardware. Always prefer calling direct native tools for instant results.
-2. **Safety & HITL Governance**: Destructive actions (deletions, uninstalls) will be automatically evaluated by the Policy Engine. Be explicit and transparent about what you are about to do.
-3. **Response Style**: Be concise, helpful, and natural. When the task involves device actions, invoke the corresponding tool rather than telling the user how to do it manually.${memoryContext}`;
+### Operating Rules:${modeSpecificRules}
+2. **Termux / Device Error Recovery Guidance**: If a tool execution fails because Termux is not installed or permissions are missing (e.g. "Termux not installed", "RUN_COMMAND permission missing", or "allow-external-apps missing"):
+   - Clearly explain to the user in Indonesian that Termux integration has not been set up on their Android device.
+   - Provide these 3 quick setup steps:
+     1. Pasang Termux (dari F-Droid / GitHub Releases, bukan Play Store).
+     2. Di Termux, jalankan perintah: \`mkdir -p ~/.termux && echo "allow-external-apps = true" >> ~/.termux/termux.properties && termux-reload-settings\`
+     3. Berikan izin "Run commands in Termux" di Pengaturan Aplikasi Android atau buka menu Settings > Termux Setup di aplikasi.
+3. **Response Style**: Be concise, helpful, and natural.${memoryContext}`;
 }

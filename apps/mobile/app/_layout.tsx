@@ -14,8 +14,13 @@ const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
 
 function resolveConvexUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (envUrl) {
+  if (envUrl && !envUrl.includes("127.0.0.1") && !envUrl.includes("localhost")) {
     return envUrl;
+  }
+
+  // On physical native devices, localhost/127.0.0.1 fails; fallback to Cloud development instance
+  if (Platform.OS !== "web") {
+    return "https://polished-parrot-102.convex.cloud";
   }
 
   // Auto-resolve laptop/host IP when running on physical device via Expo Go (if in local mode)
@@ -27,7 +32,7 @@ function resolveConvexUrl(): string {
     }
   }
 
-  return "http://localhost:3210";
+  return envUrl || "https://polished-parrot-102.convex.cloud";
 }
 
 export default function RootLayout() {

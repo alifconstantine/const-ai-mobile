@@ -141,8 +141,8 @@ export default function SettingsHubPage() {
 
   // Operating Mode State
   const [operatingMode, setOperatingMode] = useState<
-    "plan_mode" | "ask_before_change" | "edit_automatically" | "full_access_yolo"
-  >("ask_before_change");
+    "normal_mode" | "ask_before_change" | "plan_mode" | "full_access_yolo"
+  >("normal_mode");
 
   // Load from live Convex User Config
   useEffect(() => {
@@ -1496,27 +1496,27 @@ export default function SettingsHubPage() {
           <CardContent className="space-y-3">
             {[
               {
-                id: "plan_mode",
-                name: "1. Plan Mode Only",
-                desc: "Agent only creates an implementation plan without modifying any phone setting or code.",
-                badge: "Read Only",
+                id: "normal_mode",
+                name: "1. Normal Mode (Default)",
+                desc: "Pure conversational and coding assistant without terminal or device tool execution.",
+                badge: "Safe / No Tools",
               },
               {
                 id: "ask_before_change",
                 name: "2. Ask Before Change (HITL - Recommended)",
-                desc: "Prompts you with a Human-In-The-Loop dialog before deleting contacts, clearing junk, or running commands.",
+                desc: "Prompts you with a Human-In-The-Loop dialog before executing terminal scripts or modifying device state.",
                 badge: "Balanced",
               },
               {
-                id: "edit_automatically",
-                name: "3. Autonomous Execution",
-                desc: "Performs safe routine operations automatically, but asks for destructive changes.",
-                badge: "Semi-Auto",
+                id: "plan_mode",
+                name: "3. Plan Mode",
+                desc: "Agent drafts an implementation plan before requesting approval for terminal or modifying actions.",
+                badge: "Read Only",
               },
               {
                 id: "full_access_yolo",
                 name: "4. Full Access (YOLO Mode)",
-                desc: "Executes all commands, Shizuku scripts, and UI spatial automation continuously without confirmation.",
+                desc: "Executes all commands, Termux scripts, and system actions instantly without confirmation.",
                 badge: "Unrestricted",
               },
             ].map((mode) => (

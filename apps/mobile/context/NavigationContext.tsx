@@ -262,7 +262,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
   const [activeTaskTitle, setActiveTaskTitle] = useState<string>("New Task");
   const [activeModel, setActiveModel] = useState<string>("");
   const [activeOperatingMode, setActiveOperatingMode] =
-    useState<OperatingMode>("ask_before_change");
+    useState<OperatingMode>("normal_mode");
   const [activeReviewTab, setActiveReviewTab] = useState<ReviewTabType>("Review");
   const [filterMode, setFilterMode] = useState<"group" | "project">("project");
 
@@ -322,7 +322,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
         customBaseUrl: liveUserConfig.customBaseUrl || "",
         customApiKeys: liveUserConfig.customApiKeys || {},
         customProviders: liveUserConfig.customProviders || [],
-        operatingMode: (liveUserConfig.operatingMode as OperatingMode) || "ask_before_change",
+        operatingMode: (liveUserConfig.operatingMode as OperatingMode) || "normal_mode",
         systemPersona: liveUserConfig.systemPersona,
         temperature: liveUserConfig.temperature,
         voiceSettings: liveUserConfig.voiceSettings as any,
@@ -419,7 +419,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({
           customBaseUrl: viewer.config.customBaseUrl || "",
           customApiKeys: viewer.config.customApiKeys || {},
           customProviders: viewer.config.customProviders || [],
-          operatingMode: (viewer.config.operatingMode as OperatingMode) || "ask_before_change",
+          operatingMode: (viewer.config.operatingMode as OperatingMode) || "normal_mode",
           systemPersona: viewer.config.systemPersona,
           temperature: viewer.config.temperature,
           voiceSettings: viewer.config.voiceSettings as any,

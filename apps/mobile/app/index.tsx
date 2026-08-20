@@ -201,24 +201,24 @@ export default function HomeScreen() {
 
   const renderModeIcon = () => {
     switch (activeOperatingMode) {
+      case "normal_mode":
+        return <Bot size={13} color="#22c55e" />;
       case "ask_before_change":
         return <Hand size={13} color="#f59e0b" />;
-      case "edit_automatically":
-        return <ShieldCheck size={13} color="#22c55e" />;
       case "plan_mode":
         return <ClipboardList size={13} color="#38bdf8" />;
       case "full_access_yolo":
       default:
-        return <ShieldAlert size={13} color="#f59e0b" />;
+        return <ShieldAlert size={13} color="#ef4444" />;
     }
   };
 
   const getModeLabel = () => {
     switch (activeOperatingMode) {
+      case "normal_mode":
+        return "Normal mode";
       case "ask_before_change":
         return "Ask before changes";
-      case "edit_automatically":
-        return "Edit automatically";
       case "plan_mode":
         return "Plan mode";
       case "full_access_yolo":

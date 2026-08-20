@@ -21,8 +21,9 @@ export interface EvaluatedToolCall {
   id: string;
   toolName: ConstToolName;
   args: Record<string, unknown>;
-  policyDecision: "allow" | "ask";
-  status: "running" | "waiting_hitl";
+  policyDecision: "allow" | "ask" | "deny";
+  status: "running" | "waiting_hitl" | "failed" | "success";
+  error?: string;
 }
 
 export interface SendMessageResult {
@@ -72,7 +73,7 @@ export const sendMessage = action({
     const operatingMode: OperatingMode =
       (args.operatingModeOverride as OperatingMode) ||
       userConfig?.operatingMode ||
-      "ask_before_change";
+      "normal_mode";
 
     // Clean active model string (strip UI prefixes/suffixes if present)
     const rawModel = args.modelOverride || userConfig?.activeModel || "Const";
@@ -173,13 +174,15 @@ export const sendMessage = action({
 
     // 4. Dispatch to LLM Provider via Hermes Transport Layer
     let llmResponse;
+    const toolsForLLM = operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS;
+
     try {
       llmResponse = await executeLLMCompletion(messages, {
         provider,
         model: activeModel,
         apiKey,
         customBaseUrl,
-        tools: CONST_DEVICE_TOOLS,
+        tools: toolsForLLM,
       });
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -233,7 +236,16 @@ export const sendMessage = action({
       // Evaluate against operating mode
       const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
 
-      if (policy.decision === "ask") {
+      if (policy.decision === "deny") {
+        evaluatedToolCalls.push({
+          id: tc.id,
+          toolName,
+          args: toolArgs,
+          policyDecision: "deny" as const,
+          status: "failed" as const,
+          error: policy.reason,
+        });
+      } else if (policy.decision === "ask") {
         pendingInterceptions.push({
           tcId: tc.id,
           toolName,
@@ -350,7 +362,7 @@ export const submitToolResult = action({
     });
 
     const operatingMode: OperatingMode =
-      userConfig?.operatingMode || "ask_before_change";
+      userConfig?.operatingMode || "normal_mode";
 
     // Find the last assistant modelUsed if available
     const lastAssistantMsg = [...history].reverse().find((m: any) => m.role === "assistant" && m.modelUsed);
@@ -453,7 +465,7 @@ export const submitToolResult = action({
       model: activeModel,
       customBaseUrl,
       apiKey,
-      tools: CONST_DEVICE_TOOLS,
+      tools: operatingMode === "normal_mode" ? undefined : CONST_DEVICE_TOOLS,
     });
 
     // If continuation requested further tool calls, evaluate and save
@@ -473,7 +485,16 @@ export const submitToolResult = action({
         const toolArgs = tc.arguments;
         const policy = evaluateToolPolicy(operatingMode, toolName, toolArgs);
 
-        if (policy.decision === "ask") {
+        if (policy.decision === "deny") {
+          evaluatedToolCalls.push({
+            id: tc.id,
+            toolName,
+            args: toolArgs,
+            policyDecision: "deny" as const,
+            status: "failed" as const,
+            error: policy.reason,
+          });
+        } else if (policy.decision === "ask") {
           pendingInterceptions.push({
             tcId: tc.id,
             toolName,

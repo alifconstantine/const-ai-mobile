@@ -43,9 +43,9 @@ export default defineSchema({
     inferenceMode: v.union(v.literal("byok"), v.literal("managed_credits")),
     activeModel: v.string(),
     operatingMode: v.union(
-      v.literal("plan_mode"),
+      v.literal("normal_mode"),
       v.literal("ask_before_change"),
-      v.literal("edit_automatically"),
+      v.literal("plan_mode"),
       v.literal("full_access_yolo")
     ),
     customApiKeys: v.object({

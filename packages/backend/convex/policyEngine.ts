@@ -176,26 +176,15 @@ export function evaluateToolPolicy(
 ): PolicyEvaluationResult {
   const { riskLevel, userFacingSummary, actionType } = classifyToolRisk(toolName, args);
 
-  // 1. Plan Mode: AI cannot execute modifying actions without an approved plan
-  if (operatingMode === "plan_mode") {
-    if (riskLevel === "low") {
-      return {
-        decision: "allow",
-        riskLevel,
-        reason: "Read-only and inspection actions are allowed in Plan Mode.",
-        userFacingSummary,
-        suggestedActionType: actionType,
-      };
-    }
-    if (!hasApprovedPlan) {
-      return {
-        decision: "ask",
-        riskLevel,
-        reason: "Modifying action requires an approved Implementation Plan first.",
-        userFacingSummary,
-        suggestedActionType: actionType,
-      };
-    }
+  // 1. Normal Mode (Default): Pure conversational & code assistant. All device & terminal tools are disabled.
+  if (operatingMode === "normal_mode") {
+    return {
+      decision: "deny",
+      riskLevel,
+      reason: "Semua eksekusi terminal dan perintah sistem dinonaktifkan pada Normal Mode. Const AI beroperasi sebagai asisten teks & kode murni.",
+      userFacingSummary,
+      suggestedActionType: actionType,
+    };
   }
 
   // 2. Ask Before Change Mode (Strict Human-in-the-Loop)
@@ -218,13 +207,22 @@ export function evaluateToolPolicy(
     };
   }
 
-  // 3. Edit Automatically Mode (Standard Assistant)
-  if (operatingMode === "edit_automatically") {
-    if (riskLevel === "critical") {
+  // 3. Plan Mode: AI cannot execute modifying actions without an approved plan
+  if (operatingMode === "plan_mode") {
+    if (riskLevel === "low") {
+      return {
+        decision: "allow",
+        riskLevel,
+        reason: "Read-only and inspection actions are allowed in Plan Mode.",
+        userFacingSummary,
+        suggestedActionType: actionType,
+      };
+    }
+    if (!hasApprovedPlan) {
       return {
         decision: "ask",
         riskLevel,
-        reason: "Critical actions (deletions, uninstalls) always require explicit approval.",
+        reason: "Modifying action requires an approved Implementation Plan first.",
         userFacingSummary,
         suggestedActionType: actionType,
       };
@@ -232,7 +230,7 @@ export function evaluateToolPolicy(
     return {
       decision: "allow",
       riskLevel,
-      reason: "Low and medium risk operations execute automatically in Edit Mode.",
+      reason: "Action permitted under approved Implementation Plan.",
       userFacingSummary,
       suggestedActionType: actionType,
     };

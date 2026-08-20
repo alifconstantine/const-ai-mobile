@@ -9,9 +9,9 @@ import {
 } from "react-native";
 import {
   Hand,
-  ShieldCheck,
-  ClipboardList,
   ShieldAlert,
+  ClipboardList,
+  Bot,
   Check,
 } from "lucide-react-native";
 import { OperatingMode } from "@const-ai/types";
@@ -22,32 +22,37 @@ interface ModeOption {
   name: string;
   desc: string;
   icon: any;
+  color: string;
 }
 
 const MODES: ModeOption[] = [
   {
-    id: "ask_before_change",
-    name: "Ask before changes",
-    desc: "Ask before file changes.",
-    icon: Hand,
+    id: "normal_mode",
+    name: "Normal Mode (Default)",
+    desc: "Obrolan & analisis kode murni tanpa akses terminal.",
+    icon: Bot,
+    color: "#22c55e",
   },
   {
-    id: "edit_automatically",
-    name: "Edit automatically",
-    desc: "Edit files automatically.",
-    icon: ShieldCheck,
+    id: "ask_before_change",
+    name: "Ask Before Changes",
+    desc: "Akses terminal & tools aktif dengan konfirmasi HITL.",
+    icon: Hand,
+    color: "#f59e0b",
   },
   {
     id: "plan_mode",
-    name: "Plan mode",
-    desc: "Plan before editing.",
+    name: "Plan Mode",
+    desc: "Membuat rencana kerja dulu, akses terminal dengan izin.",
     icon: ClipboardList,
+    color: "#38bdf8",
   },
   {
     id: "full_access_yolo",
-    name: "Full access",
-    desc: "Run with fewer confirmations.",
+    name: "Full Access (YOLO)",
+    desc: "Eksekusi terminal & sistem otomatis tanpa dialog.",
     icon: ShieldAlert,
+    color: "#ef4444",
   },
 ];
 
@@ -92,7 +97,7 @@ export const OperatingModeModal: React.FC = () => {
                     <View style={styles.modeIconContainer}>
                       <Icon
                         size={16}
-                        color={isSelected ? "#fafafa" : "#a1a1aa"}
+                        color={isSelected ? mode.color : "#a1a1aa"}
                       />
                     </View>
 

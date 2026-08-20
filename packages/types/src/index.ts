@@ -8,9 +8,9 @@
 // ==========================================
 
 export type OperatingMode =
-  | "plan_mode"
+  | "normal_mode"
   | "ask_before_change"
-  | "edit_automatically"
+  | "plan_mode"
   | "full_access_yolo";
 
 export type RiskLevel = "low" | "medium" | "critical";

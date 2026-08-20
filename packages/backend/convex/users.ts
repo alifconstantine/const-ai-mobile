@@ -142,7 +142,7 @@ export const getOrCreateDefaultUser = mutation({
         userId: targetUser._id,
         inferenceMode: "byok",
         activeModel: "",
-        operatingMode: "ask_before_change",
+        operatingMode: "normal_mode",
         provider: "custom_openai",
         customBaseUrl: "http://localhost:20128/v1",
         customApiKeys: {
@@ -200,9 +200,9 @@ export const updateUserConfig = mutation({
     activeModel: v.optional(v.string()),
     operatingMode: v.optional(
       v.union(
-        v.literal("plan_mode"),
+        v.literal("normal_mode"),
         v.literal("ask_before_change"),
-        v.literal("edit_automatically"),
+        v.literal("plan_mode"),
         v.literal("full_access_yolo")
       )
     ),
@@ -285,7 +285,7 @@ export const updateUserConfig = mutation({
         userId,
         inferenceMode: "byok",
         activeModel: (args.activeModel as string) || "",
-        operatingMode: (args.operatingMode as any) || "ask_before_change",
+        operatingMode: (args.operatingMode as any) || "normal_mode",
         provider: args.provider || "custom_openai",
         customBaseUrl: args.customBaseUrl || "http://localhost:20128/v1",
         customApiKeys: (args.customApiKeys as any) || {},
@@ -377,7 +377,7 @@ export const syncClerkUser = mutation({
         userId: user._id,
         inferenceMode: "byok",
         activeModel: "Const",
-        operatingMode: "ask_before_change",
+        operatingMode: "normal_mode",
         provider: "custom_openai",
         customBaseUrl: "http://localhost:20128/v1",
         customApiKeys: {
