@@ -7,9 +7,7 @@ import { useAuth } from "@clerk/nextjs";
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const convex = useMemo(() => {
-    const url =
-      process.env.NEXT_PUBLIC_CONVEX_URL ||
-      "http://127.0.0.1:3210";
+    const url = process.env.NEXT_PUBLIC_CONVEX_URL || "";
     return new ConvexReactClient(url);
   }, []);
 
