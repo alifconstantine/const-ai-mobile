@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "constai",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -25,7 +25,9 @@
       "package": "com.constai.mobile"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "web": {
       "bundler": "metro",
