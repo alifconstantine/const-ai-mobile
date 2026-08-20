@@ -1,0 +1,23 @@
+﻿# Agent tools & symlinks (Prevents Windows EPERM symlink error)
+.agents/
+.agents
+.claude/
+.claude
+.gemini/
+.gemini
+
+# Web frontend
+apps/web/
+
+# Build caches & stores
+.turbo/
+.next/
+.gradle/
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/.cxx/
+**/android/local.properties
+.pnpm-store/
+node_modules/
+*.log

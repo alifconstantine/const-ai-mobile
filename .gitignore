@@ -53,6 +53,12 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# AI Agents & Skills symlinks
+.agents/
+.claude/
+.gemini/
+
 # UI References
 reference-ui/
+
 
