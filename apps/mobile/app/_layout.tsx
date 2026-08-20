@@ -6,6 +6,7 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 import { NavigationProvider } from "../context/NavigationContext";
 import { tokenCache } from "../services/auth/tokenCache";
 
@@ -13,11 +14,25 @@ const publishableKey =
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
   "pk_test_bmF0dXJhbC1sZW1taW5nLTQ2NDQuY2xlcmsuYWNjb3VudHMuZGV2JA";
 
-const convexUrl =
-  process.env.EXPO_PUBLIC_CONVEX_URL || "http://127.0.0.1:3210";
+function resolveConvexUrl(): string {
+  if (process.env.EXPO_PUBLIC_CONVEX_URL) {
+    return process.env.EXPO_PUBLIC_CONVEX_URL;
+  }
+
+  // Auto-resolve laptop/host IP when running on physical device via Expo Go
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const hostIp = hostUri.split(":")[0];
+    if (hostIp && hostIp !== "localhost" && hostIp !== "127.0.0.1") {
+      return `http://${hostIp}:3210`;
+    }
+  }
+
+  return "http://127.0.0.1:3210";
+}
 
 export default function RootLayout() {
-  const convex = useMemo(() => new ConvexReactClient(convexUrl), []);
+  const convex = useMemo(() => new ConvexReactClient(resolveConvexUrl()), []);
 
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
