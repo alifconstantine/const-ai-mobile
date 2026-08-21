@@ -306,40 +306,21 @@ export const CONST_DEVICE_TOOLS: ToolDefinition[] = [
 ];
 
 /**
- * Builds the comprehensive system prompt for the Const AI agent.
+ * Builds the cache-stable system prompt for the Const AI agent.
+ * Byte-identical across turns to maximize LLM KV-cache prefix reuse (Claude, Gemini, DeepSeek).
  */
-export function buildSystemPrompt(options: {
+export function buildStableSystemPrompt(options: {
   persona?: string;
   operatingMode?: string;
   platform?: string;
-  workspaceType?: "standalone" | "project_folder";
-  workingDirectory?: string;
-  memories?: Array<{ key: string; value: string; category: string }>;
   activeModel?: string;
 }): string {
   const {
     persona = "You are Const AI, a fast, proactive, and intelligent personal phone assistant and OS operator.",
     operatingMode = "normal_mode",
     platform = "android",
-    workspaceType = "standalone",
-    workingDirectory,
-    memories = [],
     activeModel = "auto",
   } = options;
-
-  let memoryContext = "";
-  if (memories.length > 0) {
-    memoryContext = `\n\n### User Long-Term Memories & Preferences:\n${memories
-      .map((m) => `- [${m.category}] ${m.key}: ${m.value}`)
-      .join("\n")}`;
-  }
-
-  let workspaceContext = "";
-  if (workspaceType === "project_folder" && workingDirectory) {
-    workspaceContext = `\n- Workspace Mode: Project Folder (Bound to active project)\n- Working Directory: ${workingDirectory} (Always use or reference this directory when executing terminal scripts or inspecting project files)`;
-  } else {
-    workspaceContext = `\n- Workspace Mode: Standalone (General conversation without bound project directory)`;
-  }
 
   let modeSpecificRules = "";
   if (operatingMode === "normal_mode") {
@@ -361,19 +342,74 @@ export function buildSystemPrompt(options: {
 
   return `${persona}
 
-### Operational Context:
+### System Architecture & Operational Profile:
 - Operating Platform: ${platform}
 - Active Operating Mode: ${operatingMode}
-- Active Model: ${activeModel}${workspaceContext}
-- Current Date/Time: ${new Date().toISOString()}
+- Active Model: ${activeModel}
 
-### Operating Rules:${modeSpecificRules}
+### Core Operating Rules:${modeSpecificRules}
 2. **Termux / Device Error Recovery Guidance**: If a tool execution fails because Termux is not installed or permissions are missing (e.g. "Termux not installed", "RUN_COMMAND permission missing", or "allow-external-apps missing"):
    - Clearly explain to the user in Indonesian that Termux integration has not been set up on their Android device.
    - Provide these 3 quick setup steps:
      1. Pasang Termux (dari F-Droid / GitHub Releases, bukan Play Store).
      2. Di Termux, jalankan perintah: \`mkdir -p ~/.termux && echo "allow-external-apps = true" >> ~/.termux/termux.properties && termux-reload-settings\`
      3. Berikan izin "Run commands in Termux" di Pengaturan Aplikasi Android atau buka menu Settings > Termux Setup di aplikasi.
-3. **Response Style**: Be concise, helpful, and natural.${memoryContext}`;
+3. **Response Style**: Be concise, helpful, precise, and natural. Keep code clean and production-ready.`;
+}
+
+/**
+ * Builds the dynamic runtime context (timestamp, workspace directory, memories).
+ * Appended at the boundary to avoid invalidating the static system prompt prefix.
+ */
+export function buildRuntimeContext(options: {
+  workspaceType?: "standalone" | "project_folder";
+  workingDirectory?: string;
+  memories?: Array<{ key: string; value: string; category: string }>;
+}): string {
+  const {
+    workspaceType = "standalone",
+    workingDirectory,
+    memories = [],
+  } = options;
+
+  const lines: string[] = [];
+  lines.push(`<runtime-context>`);
+  lines.push(`current_time: ${new Date().toISOString()}`);
+
+  if (workspaceType === "project_folder" && workingDirectory) {
+    lines.push(`workspace_mode: project_folder`);
+    lines.push(`working_directory: ${workingDirectory}`);
+    lines.push(`workspace_note: Always use or reference ${workingDirectory} when executing terminal scripts or inspecting local project files.`);
+  } else {
+    lines.push(`workspace_mode: standalone`);
+    lines.push(`workspace_note: General conversation without bound local directory.`);
+  }
+
+  if (memories.length > 0) {
+    lines.push(`user_memories:`);
+    for (const m of memories) {
+      lines.push(`  - [${m.category}] ${m.key}: ${m.value}`);
+    }
+  }
+
+  lines.push(`</runtime-context>`);
+  return lines.join("\n");
+}
+
+/**
+ * Builds the full system prompt (combines stable prompt with runtime context).
+ */
+export function buildSystemPrompt(options: {
+  persona?: string;
+  operatingMode?: string;
+  platform?: string;
+  workspaceType?: "standalone" | "project_folder";
+  workingDirectory?: string;
+  memories?: Array<{ key: string; value: string; category: string }>;
+  activeModel?: string;
+}): string {
+  const stable = buildStableSystemPrompt(options);
+  const runtime = buildRuntimeContext(options);
+  return `${stable}\n\n${runtime}`;
 }
 

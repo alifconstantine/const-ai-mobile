@@ -184,12 +184,30 @@ export const ExploreView: React.FC = () => {
     setExpandedFolders((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleOpenFile = (node: ExplorerNode) => {
+  const handleOpenFile = async (node: ExplorerNode) => {
+    setIsLoading(true);
+    let fileContent = `// File: ${node.name}\n// Path: ${node.fullPath}\n// Loading content...\n`;
+    try {
+      const result = await TermuxBridge.executeScript({
+        script: `head -n 500 "${node.fullPath}" 2>/dev/null || cat "${node.fullPath}"`,
+        workingDir: activeWorkingDirectory || "/data/data/com.termux/files/home",
+      });
+      if (result && result.stdout) {
+        fileContent = result.stdout;
+      }
+    } catch (err) {
+      console.warn("Failed to read file content from Termux:", err);
+      fileContent = `// Unable to read file content from Termux:\n// ${String(err)}`;
+    } finally {
+      setIsLoading(false);
+    }
+
     openSideTab({
       id: `tab-file-${node.id}`,
       type: "File",
       title: node.name,
       filename: node.fullPath || node.name,
+      content: fileContent,
       isClosable: true,
     });
   };

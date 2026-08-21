@@ -135,10 +135,13 @@ export default defineSchema({
       v.literal("remote_client"),
       v.literal("desktop_runner")
     ),
-    publicKey: v.string(),
+    publicKey: v.optional(v.string()),
+    deviceToken: v.optional(v.string()),
+    pairingCode: v.optional(v.string()),
     isOnline: v.boolean(),
     lastPingAt: v.number(),
     localModelDownloaded: v.optional(v.boolean()),
+    termuxVersion: v.optional(v.string()),
     shizukuActive: v.optional(v.boolean()),
     accessibilityActive: v.optional(v.boolean()),
     batteryLevel: v.optional(v.number()),
@@ -147,7 +150,9 @@ export default defineSchema({
     ramTotalMb: v.optional(v.number()),
     storageFreeGb: v.optional(v.number()),
     storageTotalGb: v.optional(v.number()),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_pairing_code", ["pairingCode"]),
 
   devicePairings: defineTable({
     userId: v.id("users"),

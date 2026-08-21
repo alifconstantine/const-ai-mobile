@@ -28,7 +28,12 @@ interface DiffLine {
 
 export const CodeDiffView: React.FC = () => {
   const [isReviewed, setIsReviewed] = useState(false);
-  const { activeConversationId } = useNavigation();
+  const [copied, setCopied] = useState(false);
+  const { activeConversationId, openTabs, activeTabId } = useNavigation();
+
+  const activeTab = useMemo(() => {
+    return openTabs.find((t) => t.id === activeTabId);
+  }, [openTabs, activeTabId]);
 
   const pendingActions = useQuery(
     (api as any).pendingActions?.listPendingByConversation,
@@ -40,7 +45,25 @@ export const CodeDiffView: React.FC = () => {
     return pendingActions.find((a: any) => a.diffContent || a.command) || pendingActions[0];
   }, [pendingActions]);
 
+  // Check if viewing a specific opened file
+  const isFileView = activeTab?.type === "File" && activeTab?.content !== undefined;
+
   const { diffLines, fileName, adds, dels } = useMemo(() => {
+    if (isFileView && activeTab?.content !== undefined) {
+      const lines = activeTab.content.split("\n");
+      const parsed: DiffLine[] = lines.map((l: string, idx: number) => ({
+        lineNum: idx + 1,
+        type: "normal",
+        content: l,
+      }));
+      return {
+        diffLines: parsed,
+        fileName: activeTab.filename || activeTab.title || "file",
+        adds: 0,
+        dels: 0,
+      };
+    }
+
     if (!activeAction?.diffContent) {
       return { diffLines: [], fileName: "", adds: 0, dels: 0 };
     }
@@ -68,9 +91,9 @@ export const CodeDiffView: React.FC = () => {
       adds: addCount,
       dels: delCount,
     };
-  }, [activeAction]);
+  }, [activeAction, isFileView, activeTab]);
 
-  if (!activeAction || diffLines.length === 0) {
+  if (!isFileView && (!activeAction || diffLines.length === 0)) {
     return (
       <View style={[styles.container, styles.emptyContainer]}>
         <CheckCircle2 size={32} color="#22c55e" />
@@ -90,24 +113,48 @@ export const CodeDiffView: React.FC = () => {
           <View style={styles.fileIconBadge}>
             <FileCode size={12} color="#000" />
           </View>
-          <Text style={styles.fileName}>{fileName}</Text>
+          <Text style={styles.fileName} numberOfLines={1}>
+            {fileName.split("/").pop() || fileName}
+          </Text>
           <View style={styles.diffPill}>
-            <Text style={styles.diffAdd}>+{adds}</Text>
-            <Text style={styles.diffDel}>-{dels}</Text>
+            {isFileView ? (
+              <Text style={styles.diffLinesCount}>{diffLines.length} lines</Text>
+            ) : (
+              <>
+                <Text style={styles.diffAdd}>+{adds}</Text>
+                <Text style={styles.diffDel}>-{dels}</Text>
+              </>
+            )}
           </View>
         </View>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={[styles.btnReview, isReviewed && styles.btnReviewed]}
-            onPress={() => setIsReviewed(!isReviewed)}
-          >
-            {isReviewed ? (
-              <Check size={12} color="#22c55e" />
-            ) : (
-              <Text style={styles.btnReviewText}>Review</Text>
-            )}
-          </TouchableOpacity>
+          {isFileView ? (
+            <TouchableOpacity
+              style={[styles.btnReview, copied && styles.btnReviewed]}
+              onPress={() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? (
+                <Text style={[styles.btnReviewText, { color: "#22c55e" }]}>Copied!</Text>
+              ) : (
+                <Text style={styles.btnReviewText}>Copy File</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btnReview, isReviewed && styles.btnReviewed]}
+              onPress={() => setIsReviewed(!isReviewed)}
+            >
+              {isReviewed ? (
+                <Check size={12} color="#22c55e" />
+              ) : (
+                <Text style={styles.btnReviewText}>Review</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -218,6 +265,11 @@ const styles = StyleSheet.create({
     color: "#f85149",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  diffLinesCount: {
+    color: "#a1a1aa",
+    fontSize: 11,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   actionsRow: {
     flexDirection: "row",

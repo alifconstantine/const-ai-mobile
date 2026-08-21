@@ -36,8 +36,9 @@ import {
   Copy,
   Zap,
   RefreshCw,
+  QrCode,
 } from "lucide-react-native";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "@const-ai/backend";
 import { OperatingMode } from "@const-ai/types";
 import { useNavigation } from "../../context/NavigationContext";
@@ -190,6 +191,34 @@ export const SettingsModal: React.FC = () => {
     isNative: false,
   });
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+
+  // Web Pairing State
+  const pairDeviceMutation = useMutation((api as any).devices?.pairDevice);
+  const [pairingCodeInput, setPairingCodeInput] = useState("");
+  const [isPairing, setIsPairing] = useState(false);
+  const [pairingResult, setPairingResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handlePairWithWeb = async () => {
+    if (!pairingCodeInput.trim()) return;
+    setIsPairing(true);
+    setPairingResult(null);
+    try {
+      const res = await pairDeviceMutation({
+        pairingCode: pairingCodeInput.trim().toUpperCase(),
+        deviceName: Platform.OS === "android" ? "Android Phone Companion" : "Mobile Companion",
+        platform: "android",
+        termuxVersion: termuxStatus.version || "0.118",
+        shizukuActive: true,
+        accessibilityActive: true,
+      });
+      setPairingResult({ success: true, message: res?.message || "Perangkat berhasil terhubung ke Web Dashboard!" });
+      setPairingCodeInput("");
+    } catch (err: any) {
+      setPairingResult({ success: false, message: err?.message || "Kode pairing tidak valid atau telah kedaluwarsa." });
+    } finally {
+      setIsPairing(false);
+    }
+  };
 
   // Sync state from context / userConfig
   useEffect(() => {
@@ -951,6 +980,80 @@ export const SettingsModal: React.FC = () => {
                 {/* 4. TERMUX & DEVICE SETUP TAB */}
                 {activeTab === "system" && (
                   <View style={styles.tabContent}>
+                    {/* Web Dashboard Pairing Section */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Hubungkan ke Web Dashboard</Text>
+                      <View style={styles.formCard}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                          <QrCode size={15} color="#38bdf8" />
+                          <Text style={styles.formCardTitle}>Pairing via QR / PIN Code</Text>
+                        </View>
+                        <Text style={styles.sectionSubTitle}>
+                          Buka Web Dashboard di laptop/browser (menu Devices), lalu masukkan kode 6-digit (misal: CNST-8492) di bawah:
+                        </Text>
+
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                          <TextInput
+                            style={[styles.input, { flex: 1, textTransform: "uppercase", letterSpacing: 2, fontWeight: "700" }]}
+                            placeholder="CNST-••••"
+                            placeholderTextColor="#52525b"
+                            value={pairingCodeInput}
+                            onChangeText={setPairingCodeInput}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                          />
+                          <TouchableOpacity
+                            style={[
+                              styles.btnAction,
+                              { backgroundColor: "#38bdf8", paddingHorizontal: 14 },
+                              isPairing && { opacity: 0.6 },
+                            ]}
+                            onPress={handlePairWithWeb}
+                            disabled={isPairing || !pairingCodeInput.trim()}
+                          >
+                            {isPairing ? (
+                              <ActivityIndicator size="small" color="#09090b" />
+                            ) : (
+                              <Text style={[styles.btnActionText, { color: "#09090b", fontWeight: "700" }]}>
+                                Hubungkan
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+
+                        {pairingResult && (
+                          <View
+                            style={{
+                              marginTop: 6,
+                              padding: 8,
+                              borderRadius: 6,
+                              backgroundColor: pairingResult.success ? "rgba(34, 197, 94, 0.1)" : "rgba(248, 113, 113, 0.1)",
+                              borderWidth: 1,
+                              borderColor: pairingResult.success ? "rgba(34, 197, 94, 0.3)" : "rgba(248, 113, 113, 0.3)",
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            {pairingResult.success ? (
+                              <Check size={13} color="#22c55e" />
+                            ) : (
+                              <AlertCircle size={13} color="#f87171" />
+                            )}
+                            <Text
+                              style={{
+                                color: pairingResult.success ? "#4ade80" : "#f87171",
+                                fontSize: 11,
+                                flex: 1,
+                              }}
+                            >
+                              {pairingResult.message}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
                     <View style={styles.section}>
                       <Text style={styles.sectionTitle}>Linux Termux Setup (On-Device Terminal)</Text>
 
@@ -1449,6 +1552,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  sectionSubTitle: {
+    color: "#71717a",
+    fontSize: 11,
+    lineHeight: 16,
   },
   providerCard: {
     backgroundColor: "#121215",

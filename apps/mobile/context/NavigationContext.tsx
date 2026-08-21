@@ -24,6 +24,7 @@ export interface SideTabItem {
   type: ReviewTabType;
   title: string;
   filename?: string;
+  content?: string;
   url?: string;
   isClosable?: boolean;
 }

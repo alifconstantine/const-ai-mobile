@@ -9,6 +9,7 @@ import { useQuery } from "convex/react";
 import { api } from "@const-ai/backend";
 import {
   LayoutDashboard,
+  Smartphone,
   Settings,
   LogOut,
   Loader2,
@@ -109,6 +110,12 @@ export default function DashboardLayout({
       href: "/dashboard",
       icon: LayoutDashboard,
       active: pathname === "/dashboard",
+    },
+    {
+      name: "Devices & QR Sync",
+      href: "/dashboard/devices",
+      icon: Smartphone,
+      active: pathname === "/dashboard/devices",
     },
     {
       name: "Settings & BYOK",
