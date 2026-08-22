@@ -1,6 +1,6 @@
 # Const AI Mobile
 
-> Platform Asisten Cerdas Mandiri, Mesin Suara Neural On-Device, dan Agen Pengembang Otonom
+> LOCAL AI AGENT KAMU DI MOBILE
 
 Const AI Mobile adalah platform multi-fungsi yang menggabungkan asisten produktivitas cerdas, mesin Text-to-Speech (TTS) neural lokal berkecepatan tinggi berbasis ONNX Runtime, agen coding otonom dengan integrasi terminal shell lokal (Android Termux), serta orkestrasi otomasi terjadwal 24/7 menggunakan backend reaktif Convex dan Web Control Center berbasis Next.js.
 
